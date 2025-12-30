@@ -86,94 +86,108 @@ class SoundManager {
 
     // MARK: - Sound Effects
 
-    /// Warning — gentle two-note alert (like a soft notification)
+    /// Warning — very gentle single soft tone (like a whisper)
     func playWarningSound() {
-        // G5 -> G5 (gentle double tap)
+        // Single soft G5 — minimal intrusion
         playMelody([
-            (frequency: 784, duration: 0.08, delay: 0),
-            (frequency: 784, duration: 0.08, delay: 0.12)
-        ], volume: 0.12)
+            (frequency: 784, duration: 0.1, delay: 0)
+        ], volume: 0.06)
     }
 
-    /// Distracted — descending minor third (gentle disappointment)
+    /// Distracted — soft descending tone (gentle reminder, not scolding)
     func playDistractedSound() {
-        // E5 -> C5 (minor third down, sounds thoughtful not harsh)
+        // E5 -> D5 (just a step down, gentle nudge)
         playMelody([
-            (frequency: 659, duration: 0.15, delay: 0),
-            (frequency: 523, duration: 0.2, delay: 0.15)
-        ], volume: 0.15)
-    }
-
-    /// Welcome Back — ascending major chord (cheerful return)
-    func playWelcomeBackSound() {
-        // C5 -> E5 -> G5 (major triad, happy sound)
-        playMelody([
-            (frequency: 523, duration: 0.1, delay: 0),
-            (frequency: 659, duration: 0.1, delay: 0.08),
-            (frequency: 784, duration: 0.15, delay: 0.16)
-        ], volume: 0.12)
-    }
-
-    /// Happy chirp — quick ascending interval
-    func playHappyChirp() {
-        // Quick C6 -> E6
-        playMelody([
-            (frequency: 1047, duration: 0.06, delay: 0),
-            (frequency: 1319, duration: 0.08, delay: 0.05)
-        ], volume: 0.1)
-    }
-
-    /// Click — soft tap
-    func playClick() {
-        playMelody([
-            (frequency: 1000, duration: 0.02, delay: 0)
+            (frequency: 659, duration: 0.12, delay: 0),
+            (frequency: 587, duration: 0.15, delay: 0.1)
         ], volume: 0.08)
     }
 
-    /// Love — sweet ascending arpeggio
+    /// Welcome Back — warm ascending (relieved and happy)
+    func playWelcomeBackSound() {
+        // G4 -> C5 -> E5 (warm major, welcoming)
+        playMelody([
+            (frequency: 392, duration: 0.1, delay: 0),
+            (frequency: 523, duration: 0.1, delay: 0.08),
+            (frequency: 659, duration: 0.14, delay: 0.16)
+        ], volume: 0.08)
+    }
+
+    /// Happy chirp — tiny cheerful blip
+    func playHappyChirp() {
+        // Single quick high note
+        playMelody([
+            (frequency: 880, duration: 0.05, delay: 0)
+        ], volume: 0.05)
+    }
+
+    /// Click — barely audible tap
+    func playClick() {
+        playMelody([
+            (frequency: 800, duration: 0.015, delay: 0)
+        ], volume: 0.04)
+    }
+
+    /// Love — sweet soft arpeggio
     func playLoveSound() {
-        // C5 -> E5 -> G5 -> C6 (octave arpeggio)
+        // C5 -> E5 -> G5 (simple triad, gentle)
         playMelody([
-            (frequency: 523, duration: 0.12, delay: 0),
-            (frequency: 659, duration: 0.12, delay: 0.1),
-            (frequency: 784, duration: 0.12, delay: 0.2),
-            (frequency: 1047, duration: 0.18, delay: 0.3)
-        ], volume: 0.12)
+            (frequency: 523, duration: 0.1, delay: 0),
+            (frequency: 659, duration: 0.1, delay: 0.08),
+            (frequency: 784, duration: 0.14, delay: 0.16)
+        ], volume: 0.07)
     }
 
-    /// Pomodoro Start — energetic ascending fifth
+    /// Pomodoro Start — clear but soft
     func playPomodoroStart() {
-        // C5 -> G5 (perfect fifth, strong and positive)
+        // C5 -> G5 (perfect fifth, confident but quiet)
         playMelody([
-            (frequency: 523, duration: 0.12, delay: 0),
-            (frequency: 784, duration: 0.15, delay: 0.1)
-        ], volume: 0.15)
+            (frequency: 523, duration: 0.1, delay: 0),
+            (frequency: 784, duration: 0.12, delay: 0.08)
+        ], volume: 0.08)
     }
 
-    /// Pomodoro End — completion sound (descending resolution)
+    /// Pomodoro End — satisfying completion
     func playPomodoroEnd() {
-        // G5 -> E5 -> C5 (descending triad, completion)
+        // G5 -> C5 (octave down feels like completion)
         playMelody([
-            (frequency: 784, duration: 0.12, delay: 0),
-            (frequency: 659, duration: 0.12, delay: 0.1),
-            (frequency: 523, duration: 0.18, delay: 0.2)
-        ], volume: 0.15)
+            (frequency: 784, duration: 0.1, delay: 0),
+            (frequency: 523, duration: 0.15, delay: 0.1)
+        ], volume: 0.08)
     }
 
-    /// Break Start — relaxing sound
+    /// Break Start — relaxing descending
     func playBreakStart() {
-        // Soft G4 -> C5 (fourth interval, calm)
+        // E5 -> C5 (major third down, relaxing)
         playMelody([
-            (frequency: 392, duration: 0.18, delay: 0),
-            (frequency: 523, duration: 0.22, delay: 0.15)
-        ], volume: 0.1)
+            (frequency: 659, duration: 0.15, delay: 0),
+            (frequency: 523, duration: 0.2, delay: 0.12)
+        ], volume: 0.06)
     }
 
-    /// Angry beep — low stern tone
-    func playAngrySound() {
-        // Low C4 (stern but not harsh)
+    /// Gentle nudge — for grace period ending (even softer than warning)
+    func playGentleNudge() {
+        // Very soft single tone
         playMelody([
-            (frequency: 262, duration: 0.25, delay: 0)
-        ], volume: 0.18)
+            (frequency: 600, duration: 0.08, delay: 0)
+        ], volume: 0.04)
+    }
+
+    /// Celebration — for milestones
+    func playCelebration() {
+        // Quick happy arpeggio
+        playMelody([
+            (frequency: 523, duration: 0.06, delay: 0),
+            (frequency: 659, duration: 0.06, delay: 0.05),
+            (frequency: 784, duration: 0.08, delay: 0.1)
+        ], volume: 0.06)
+    }
+
+    /// Angry beep — still soft but lower (disappointed, not aggressive)
+    func playAngrySound() {
+        // Low tone, but still gentle
+        playMelody([
+            (frequency: 330, duration: 0.2, delay: 0)
+        ], volume: 0.1)
     }
 }

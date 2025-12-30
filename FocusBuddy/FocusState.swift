@@ -16,6 +16,14 @@ class AttentionState: ObservableObject {
     var sessionStart: Date = Date()
     var lastDistraction: Date?
 
+    // Grace period — не ругаемся сразу, даём время вернуться
+    var lookAwayStart: Date?
+    let gracePeriod: TimeInterval = 2.0  // 2 секунды "прощения"
+
+    // Для плавных переходов
+    var targetLevel: Double = 1.0
+    let levelSmoothingFactor: Double = 0.15  // Насколько быстро level приближается к target
+
     // Ссылка на настройки для памяти робота
     weak var settings: AppSettings?
 
@@ -26,16 +34,44 @@ class AttentionState: ObservableObject {
         let timeMultiplier = TimeOfDay.current.robotEnergyLevel
 
         if faceVisible && lookingAtScreen {
-            // Постепенно восстанавливаем внимание
-            level = min(1.0, level + 0.15)
+            // Смотрит на экран — сбрасываем grace period
+            lookAwayStart = nil
+            // Постепенно восстанавливаем внимание (быстрее чем падает)
+            targetLevel = min(1.0, targetLevel + 0.2)
         } else if faceVisible && !lookingAtScreen {
-            // Смотрит в сторону — медленно падает (ночью медленнее)
-            let anglePenalty = min(headAngle / 0.5, 1.0) * 0.1
-            level = max(0.0, level - (0.05 + anglePenalty) * timeMultiplier)
+            // Смотрит в сторону — проверяем grace period
+            if lookAwayStart == nil {
+                lookAwayStart = Date()
+            }
+
+            let lookAwayDuration = Date().timeIntervalSince(lookAwayStart ?? Date())
+
+            if lookAwayDuration < gracePeriod {
+                // Ещё в grace period — не снижаем, но и не повышаем
+                // Робот показывает что заметил, но пока не ругается
+            } else {
+                // Grace period прошёл — теперь снижаем
+                let anglePenalty = min(headAngle / 0.5, 1.0) * 0.08
+                targetLevel = max(0.0, targetLevel - (0.04 + anglePenalty) * timeMultiplier)
+            }
         } else {
-            // Не видно лица — быстро падает (ночью медленнее)
-            level = max(0.0, level - 0.12 * timeMultiplier)
+            // Не видно лица — тоже grace period
+            if lookAwayStart == nil {
+                lookAwayStart = Date()
+            }
+
+            let awayDuration = Date().timeIntervalSince(lookAwayStart ?? Date())
+
+            if awayDuration < gracePeriod * 1.5 {
+                // Больший grace period когда лица не видно (может пьёт кофе)
+            } else {
+                // Снижаем уровень (ночью медленнее)
+                targetLevel = max(0.0, targetLevel - 0.08 * timeMultiplier)
+            }
         }
+
+        // Плавно приближаем level к targetLevel
+        level = level + (targetLevel - level) * levelSmoothingFactor
 
         // Обновляем настроение с учётом времени суток
         updateMood()

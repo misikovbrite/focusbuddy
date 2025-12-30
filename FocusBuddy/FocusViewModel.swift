@@ -145,15 +145,29 @@ class FocusViewModel: ObservableObject {
 
     private func updateLegacyState() {
         let previousState = robotState
+        let previousMood = attentionState.mood
 
         switch attentionState.mood {
         case .happy, .proud, .love, .celebrating:
             if wasDistracted {
                 robotState = .welcomeBack
                 wasDistracted = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+
+                // Более радостная реакция на возвращение — зависит от того как быстро вернулся
+                let timeAway = focusStats.distractedTime
+                if timeAway < 5 {
+                    // Быстро вернулся — робот очень рад!
+                    attentionState.setMood(.celebrating)
+                } else if timeAway < 15 {
+                    // Нормально вернулся — робот рад
+                    attentionState.setMood(.happy)
+                }
+                // Иначе просто neutral после welcomeBack
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                     if self?.robotState == .welcomeBack {
                         self?.robotState = .focused
+                        self?.attentionState.setMood(.happy)
                     }
                 }
             } else if robotState != .welcomeBack {
@@ -175,16 +189,53 @@ class FocusViewModel: ObservableObject {
         if previousState != robotState {
             focusStats.recordStateChange(to: robotState)
 
-            // Звуки
+            // Звуки — только если состояние ухудшилось (не спамим при улучшении)
             switch robotState {
             case .warning:
-                SoundManager.shared.playWarningSound()
+                // Только если перешли из focused в warning (градация)
+                if previousState == .focused {
+                    // Первый раз — тихое предупреждение
+                    SoundManager.shared.playWarningSound()
+                }
             case .distracted:
                 SoundManager.shared.playDistractedSound()
             case .welcomeBack:
                 SoundManager.shared.playWelcomeBackSound()
-            default:
-                break
+            case .focused:
+                // Позитивное подкрепление — тихий звук при возврате в фокус
+                if previousState == .warning || previousState == .welcomeBack {
+                    SoundManager.shared.playHappyChirp()
+                }
+            }
+        }
+
+        // Позитивное подкрепление за долгий фокус (каждые 10 минут)
+        checkPositiveReinforcement()
+    }
+
+    private var lastPositiveReinforcement: Date?
+
+    private func checkPositiveReinforcement() {
+        // Каждые 10 минут непрерывного фокуса — маленькая похвала
+        let focusStreak = focusStats.focusedTime
+
+        // Проверяем кратность 10 минутам (600 секунд)
+        let tenMinuteMarks = Int(focusStreak / 600)
+        let lastMark = Int((lastPositiveReinforcement != nil ? focusStats.focusedTime - 1 : 0) / 600)
+
+        if tenMinuteMarks > lastMark && tenMinuteMarks > 0 {
+            // Достигли новой отметки!
+            lastPositiveReinforcement = Date()
+
+            // Робот празднует
+            attentionState.setMood(.celebrating)
+            SoundManager.shared.playCelebration()
+
+            // Возвращаем обычное настроение через секунду
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                if self?.attentionState.mood == .celebrating {
+                    self?.attentionState.setMood(.proud)
+                }
             }
         }
     }

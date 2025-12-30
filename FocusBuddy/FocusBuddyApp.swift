@@ -670,6 +670,11 @@ struct ExtendedNotchView: View {
     @State private var showLoveEasterEgg: Bool = false  // Сердечки при двойном клике
     @State private var isExpanded: Bool = false  // Расширенная панель
     @State private var clickOutsideMonitor: Any?  // Монитор кликов вне панели
+    @State private var isYawning: Bool = false  // Зевота
+    @State private var isStretching: Bool = false  // Потягивание
+    @State private var microBounce: CGFloat = 0  // Микро-подпрыгивания
+    @State private var lastIdleAction: Date = Date()  // Время последнего idle действия
+    @State private var gestureRecognizedScale: CGFloat = 1.0  // Визуальный feedback жеста
 
     private let notchBlack = Color(nsColor: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 
@@ -747,9 +752,9 @@ struct ExtendedNotchView: View {
                         eyeSquint: eyeSquint,
                         antennaGlow: antennaGlow,
                         headTilt: headTilt,
-                        bounce: bounce + breathe
+                        bounce: bounce + breathe + microBounce
                     )
-                    .scaleEffect(isExpanded ? 2.5 : 1.0)
+                    .scaleEffect((isExpanded ? 2.5 : 1.0) * gestureRecognizedScale)
                     .offset(
                         x: isExpanded ? 0 : (currentWidth / 2 - 24),
                         y: isExpanded ? -10 : (-currentHeight / 2 + baseHeight / 2)
@@ -915,38 +920,60 @@ struct ExtendedNotchView: View {
             antennaGlow = true
         }
 
-        // Микро-дыхание — едва заметное движение вверх-вниз
-        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-            breathe = 0.3
+        // Дыхание — более заметное, естественное
+        withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
+            breathe = 1.0
+        }
+
+        // Микро-подпрыгивания — очень мягкие
+        withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+            microBounce = 0.5
         }
 
         // Периодические живые действия
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { _ in
             let random = Double.random(in: 0...1)
+            let timeSinceLastAction = Date().timeIntervalSince(lastIdleAction)
+            let isBored = viewModel.attentionState.isBored || settings.pomodoroState == .idle
 
-            if viewModel.attentionState.isBored {
-                // Скучает — оглядывается
-                if random < 0.4 {
+            if isBored && timeSinceLastAction > 15 {
+                // Долго idle — зевота или потягивание
+                if random < 0.3 {
+                    yawn()
+                } else if random < 0.5 {
+                    stretch()
+                } else if random < 0.8 {
                     lookAround()
-                } else if random < 0.7 {
+                }
+            } else if isBored {
+                // Скучает — оглядывается, наклоняет голову
+                if random < 0.35 {
+                    lookAround()
+                } else if random < 0.6 {
                     // Наклон головы от скуки
                     withAnimation(.easeInOut(duration: 0.5)) {
                         headTilt = Double.random(in: -5...5)
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         withAnimation(.easeInOut(duration: 0.5)) {
                             headTilt = 0
                         }
                     }
                 }
-            } else if random < 0.2 {
+            } else if random < 0.15 {
                 // Иногда оглядывается даже когда не скучает
                 lookAround()
+            } else if random < 0.08 {
+                // Редко — счастливый прыжок при хорошем фокусе
+                if viewModel.attentionState.mood == .happy {
+                    happyBounce()
+                }
             }
         }
     }
 
     private func lookAround() {
+        lastIdleAction = Date()
         // Глаза смотрят в сторону
         withAnimation(.easeInOut(duration: 0.3)) {
             lookAroundOffset = CGFloat.random(in: -1.5...1.5)
@@ -954,6 +981,68 @@ struct ExtendedNotchView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 lookAroundOffset = 0
+            }
+        }
+    }
+
+    private func yawn() {
+        lastIdleAction = Date()
+        isYawning = true
+
+        // Глаза закрываются, голова немного назад
+        withAnimation(.easeInOut(duration: 0.4)) {
+            eyeSquint = 0.7
+            bounce = 1
+        }
+
+        // Держим зевоту
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                self.eyeSquint = 0
+                self.bounce = 0
+                self.isYawning = false
+            }
+        }
+    }
+
+    private func stretch() {
+        lastIdleAction = Date()
+        isStretching = true
+
+        // Вытягивается вверх
+        withAnimation(.easeOut(duration: 0.5)) {
+            bounce = -4
+            headTilt = Double.random(in: [-8, 8])
+        }
+
+        // Расслабляется
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                self.bounce = 1
+            }
+        }
+
+        // Возврат
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.bounce = 0
+                self.headTilt = 0
+                self.isStretching = false
+            }
+        }
+    }
+
+    private func happyBounce() {
+        lastIdleAction = Date()
+
+        // Маленький прыжок от радости
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.4)) {
+            bounce = -2
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                self.bounce = 0
             }
         }
     }
@@ -1031,7 +1120,15 @@ struct ExtendedNotchView: View {
     }
 
     private func waveBack() {
-        // Robot waves back and toggles Pomodoro!
+        // Visual feedback — robot pulses when gesture recognized
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+            gestureRecognizedScale = 1.15
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                self.gestureRecognizedScale = 1.0
+            }
+        }
 
         // Toggle Pomodoro
         if settings.pomodoroState == .idle {
@@ -1085,6 +1182,16 @@ struct ExtendedNotchView: View {
     }
 
     private func handleStopGesture() {
+        // Visual feedback — robot pulses when gesture recognized
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+            gestureRecognizedScale = 1.15
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                self.gestureRecognizedScale = 1.0
+            }
+        }
+
         // Toggle between active monitoring and passive/chill mode
         if settings.pomodoroState == .working {
             // Switch to break - robot chills out, stops strict monitoring
@@ -1104,7 +1211,7 @@ struct ExtendedNotchView: View {
 
         // Robot reaction - close eyes briefly like "okay, I understand"
         withAnimation(.easeInOut(duration: 0.15)) {
-            eyeSquint = 1.0  // Close eyes
+            eyeSquint = 0.8  // Almost close eyes
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
