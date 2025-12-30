@@ -839,7 +839,7 @@ struct SettingsView: View {
                     Spacer()
                     ZStack {
                         Circle()
-                            .fill(settings.robotEyeColor.color.opacity(0.15))
+                            .fill(Color.green.opacity(0.15))
                             .frame(width: 100, height: 100)
                             .blur(radius: 20)
 
@@ -851,8 +851,7 @@ struct SettingsView: View {
                             antennaGlow: true,
                             headTilt: 0,
                             bounce: 0,
-                            accessory: settings.robotAccessory,
-                            customEyeColor: settings.robotEyeColor
+                            accessory: settings.robotAccessory
                         )
                         .scaleEffect(4.0)
                     }
@@ -862,44 +861,6 @@ struct SettingsView: View {
                 .padding(.vertical, 16)
                 .background(Color.black.opacity(0.3))
                 .cornerRadius(12)
-            }
-
-            // Eye Color
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label("Eye Color", systemImage: "eye.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.primary)
-
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 8) {
-                        ForEach(RobotEyeColor.allCases, id: \.self) { color in
-                            Button {
-                                withAnimation {
-                                    settings.robotEyeColor = color
-                                }
-                            } label: {
-                                VStack(spacing: 6) {
-                                    Circle()
-                                        .fill(color.color)
-                                        .frame(width: 28, height: 28)
-                                        .shadow(color: color.color.opacity(0.5), radius: 4)
-                                        .overlay(
-                                            Circle()
-                                                .stroke(Color.white, lineWidth: settings.robotEyeColor == color ? 2 : 0)
-                                        )
-                                    Text(color.displayName)
-                                        .font(.system(size: 10))
-                                        .foregroundColor(settings.robotEyeColor == color ? .primary : .secondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
             }
 
             // Accessories
@@ -2099,8 +2060,7 @@ struct ExtendedNotchView: View {
                             antennaGlow: antennaGlow && !isWakingUp,
                             headTilt: effectiveHeadTilt,
                             bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0),
-                            accessory: settings.robotAccessory,
-                            customEyeColor: settings.robotEyeColor
+                            accessory: settings.robotAccessory
                         )
                     }
                     .scaleEffect((isExpanded ? 2.5 : 1.0) * gestureRecognizedScale)
@@ -3304,15 +3264,11 @@ struct RobotFace: View {
     let headTilt: Double
     let bounce: CGFloat
     var accessory: RobotAccessory = .none
-    var customEyeColor: RobotEyeColor? = nil
 
     private let notchBlack = Color(nsColor: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 
-    // Use custom color if set, otherwise use mood color
+    // Eye color determined by mood state
     private var effectiveEyeColor: Color {
-        if let custom = customEyeColor {
-            return custom.color
-        }
         return mood.eyeColor
     }
 
@@ -3390,8 +3346,8 @@ struct RobotFace: View {
                     VStack(spacing: 1) {
                         // Брови
                         HStack(spacing: 6) {
-                            RobotBrow(mood: mood, isLeft: true, customColor: customEyeColor?.color)
-                            RobotBrow(mood: mood, isLeft: false, customColor: customEyeColor?.color)
+                            RobotBrow(mood: mood, isLeft: true)
+                            RobotBrow(mood: mood, isLeft: false)
                         }
                         .offset(y: -1)
 
@@ -3402,21 +3358,19 @@ struct RobotFace: View {
                                 mouseOffset: eyeOffset,
                                 isBlinking: isBlinking || isWinking,
                                 squint: eyeSquint,
-                                isLeft: true,
-                                customColor: customEyeColor?.color
+                                isLeft: true
                             )
                             RobotEye(
                                 mood: mood,
                                 mouseOffset: eyeOffset,
                                 isBlinking: isBlinking,
                                 squint: eyeSquint,
-                                isLeft: false,
-                                customColor: customEyeColor?.color
+                                isLeft: false
                             )
                         }
 
                         // Рот
-                        RobotMouth(mood: mood, customColor: customEyeColor?.color)
+                        RobotMouth(mood: mood)
                             .offset(y: 0.5)
                     }
                 )
@@ -3482,7 +3436,6 @@ struct RobotFace: View {
 struct RobotBrow: View {
     let mood: RobotMood
     let isLeft: Bool
-    var customColor: Color? = nil
 
     private var rotation: Double {
         let base = mood.browPosition * 15
@@ -3497,13 +3450,9 @@ struct RobotBrow: View {
         return -mood.browPosition * 1.5
     }
 
-    private var effectiveColor: Color {
-        customColor ?? mood.eyeColor
-    }
-
     var body: some View {
         RoundedRectangle(cornerRadius: 0.5)
-            .fill(effectiveColor.opacity(0.8))
+            .fill(mood.eyeColor.opacity(0.8))
             .frame(width: 5, height: 1)
             .rotationEffect(.degrees(rotation))
             .offset(y: offsetY)
@@ -3514,11 +3463,6 @@ struct RobotBrow: View {
 
 struct RobotMouth: View {
     let mood: RobotMood
-    var customColor: Color? = nil
-
-    private var effectiveColor: Color {
-        customColor ?? mood.eyeColor
-    }
 
     var body: some View {
         if mood.mouthOpen > 0.3 {
@@ -3529,12 +3473,12 @@ struct RobotMouth: View {
         } else if mood.mouthShape != 0 {
             // Улыбка или грусть
             MouthCurve(curvature: mood.mouthShape)
-                .stroke(effectiveColor.opacity(0.7), lineWidth: 1)
+                .stroke(mood.eyeColor.opacity(0.7), lineWidth: 1)
                 .frame(width: 6, height: 3)
         } else {
             // Нейтральный рот — просто линия
             Rectangle()
-                .fill(effectiveColor.opacity(0.5))
+                .fill(mood.eyeColor.opacity(0.5))
                 .frame(width: 4, height: 0.5)
         }
     }
@@ -3567,11 +3511,6 @@ struct RobotEye: View {
     let isBlinking: Bool
     var squint: CGFloat = 1.0
     let isLeft: Bool
-    var customColor: Color? = nil
-
-    private var effectiveColor: Color {
-        customColor ?? mood.eyeColor
-    }
 
     private var eyeModifier: Double {
         isLeft ? mood.leftEyeModifier : mood.rightEyeModifier
@@ -3592,9 +3531,9 @@ struct RobotEye: View {
         ZStack {
             // Глаз
             Ellipse()
-                .fill(effectiveColor)
+                .fill(mood.eyeColor)
                 .frame(width: eyeWidth, height: eyeHeight)
-                .shadow(color: effectiveColor.opacity(0.8), radius: 2)
+                .shadow(color: mood.eyeColor.opacity(0.8), radius: 2)
 
             // Зрачок (показываем даже при прищуре, но не при моргании)
             if !isBlinking {

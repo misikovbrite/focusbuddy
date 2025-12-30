@@ -44,8 +44,7 @@ class AppSettings: ObservableObject {
     @Published var currentCraft: CraftingItem? = nil
     @Published var roomDecorations: [String: String] = [:]  // position -> itemId
 
-    // Robot Customization
-    @Published var robotEyeColor: RobotEyeColor = .blue
+    // Robot Customization (accessories only, eye color is state-based)
     @Published var robotAccessory: RobotAccessory = .none
 
     // Sound Theme
@@ -507,7 +506,6 @@ class AppSettings: ObservableObject {
         }
 
         // Save Customization
-        UserDefaults.standard.set(robotEyeColor.rawValue, forKey: "robotEyeColor")
         UserDefaults.standard.set(robotAccessory.rawValue, forKey: "robotAccessory")
         UserDefaults.standard.set(soundTheme.rawValue, forKey: "soundTheme")
 
@@ -562,12 +560,7 @@ class AppSettings: ObservableObject {
             currentCraft = craft
         }
 
-        // Load Robot Customization
-        if let eyeColorRaw = UserDefaults.standard.string(forKey: "robotEyeColor"),
-           let eyeColor = RobotEyeColor(rawValue: eyeColorRaw) {
-            robotEyeColor = eyeColor
-        }
-
+        // Load Robot Customization (accessory only)
         if let accessoryRaw = UserDefaults.standard.string(forKey: "robotAccessory"),
            let accessory = RobotAccessory(rawValue: accessoryRaw) {
             robotAccessory = accessory
@@ -855,31 +848,8 @@ struct CraftingItem: Codable {
     }
 }
 
-// MARK: - Robot Customization
-
-enum RobotEyeColor: String, Codable, CaseIterable {
-    case blue
-    case green
-    case purple
-    case orange
-    case pink
-    case cyan
-
-    var color: Color {
-        switch self {
-        case .blue: return .blue
-        case .green: return .green
-        case .purple: return .purple
-        case .orange: return .orange
-        case .pink: return .pink
-        case .cyan: return .cyan
-        }
-    }
-
-    var displayName: String {
-        rawValue.capitalized
-    }
-}
+// MARK: - Robot Customization (Accessories Only)
+// Eye color is determined by robot's mood state (green=focused, yellow=warning, red=distracted)
 
 enum RobotAccessory: String, Codable, CaseIterable {
     case none
