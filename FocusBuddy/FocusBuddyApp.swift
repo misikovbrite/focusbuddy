@@ -2051,19 +2051,22 @@ struct ExtendedNotchView: View {
                             .frame(width: isExpanded ? 70 : 28, height: isExpanded ? 70 : 28)
                         }
 
-                        RobotFace(
-                            mood: effectiveMood,
-                            eyeOffset: effectiveEyeOffset,
-                            isBlinking: isBlinking && !isWakingUp,
-                            isWinking: isWinking,
-                            eyeSquint: effectiveSquint,
-                            antennaGlow: antennaGlow && !isWakingUp,
-                            headTilt: effectiveHeadTilt,
-                            bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0),
-                            accessory: settings.robotAccessory
-                        )
+                        // Скрываем основного робота когда expanded (он в комнате)
+                        if !isExpanded {
+                            RobotFace(
+                                mood: effectiveMood,
+                                eyeOffset: effectiveEyeOffset,
+                                isBlinking: isBlinking && !isWakingUp,
+                                isWinking: isWinking,
+                                eyeSquint: effectiveSquint,
+                                antennaGlow: antennaGlow && !isWakingUp,
+                                headTilt: effectiveHeadTilt,
+                                bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0),
+                                accessory: settings.robotAccessory
+                            )
+                        }
                     }
-                    .scaleEffect((isExpanded ? 2.5 : 1.0) * gestureRecognizedScale)
+                    .scaleEffect((isExpanded ? 1.0 : 1.0) * gestureRecognizedScale)
                     .opacity(isWakingUp && wakeUpPhase == 0 ? 0.7 : 1.0)
                     .offset(
                         x: isExpanded ? 0 : (currentWidth / 2 - 24),
@@ -2297,7 +2300,6 @@ struct ExtendedNotchView: View {
                     craftingItem: settings.currentCraft,
                     collectedItems: settings.collectedItems
                 )
-                .scaleEffect(1.4)
             }
             .frame(maxWidth: .infinity)
 
@@ -3253,267 +3255,288 @@ struct IsometricRoom: View {
     let craftingItem: CraftingItem?
     let collectedItems: [CollectedItem]
 
-    // Тёплые цвета для уютной комнаты
-    private let floorColor = Color(red: 0.22, green: 0.18, blue: 0.14)
-    private let wallColorLeft = Color(red: 0.28, green: 0.22, blue: 0.18)
-    private let wallColorRight = Color(red: 0.20, green: 0.16, blue: 0.13)
-    private let accentWarm = Color(red: 1.0, green: 0.85, blue: 0.5)
-    private let woodColor = Color(red: 0.4, green: 0.28, blue: 0.18)
+    // Тёплые цвета
+    private let floorColor = Color(red: 0.18, green: 0.14, blue: 0.12)
+    private let wallLeft = Color(red: 0.22, green: 0.18, blue: 0.15)
+    private let wallRight = Color(red: 0.16, green: 0.13, blue: 0.11)
+    private let warmGlow = Color(red: 1.0, green: 0.9, blue: 0.6)
 
     var body: some View {
         ZStack {
-            // === ФОН И СВЕТ ===
+            // Задняя стена (угол комнаты)
+            BackWall()
+                .fill(
+                    LinearGradient(
+                        colors: [wallLeft.opacity(0.9), wallLeft.opacity(0.7)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 280, height: 120)
+                .offset(y: -35)
 
-            // Мягкое свечение от лампы
-            Circle()
+            // Пол
+            FloorPlane()
+                .fill(
+                    LinearGradient(
+                        colors: [floorColor, floorColor.opacity(0.7)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 280, height: 70)
+                .offset(y: 50)
+
+            // Свечение от окна
+            Ellipse()
                 .fill(
                     RadialGradient(
-                        colors: [accentWarm.opacity(0.15), Color.clear],
+                        colors: [warmGlow.opacity(0.12), Color.clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 80
+                        endRadius: 60
                     )
                 )
-                .frame(width: 160, height: 160)
-                .offset(x: -30, y: -40)
+                .frame(width: 120, height: 80)
+                .offset(x: 60, y: -20)
 
-            // === КОМНАТА ===
+            // Окно
+            ZStack {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(warmGlow.opacity(0.25))
+                    .frame(width: 40, height: 35)
+                // Рама
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(Color(white: 0.3), lineWidth: 2)
+                    .frame(width: 40, height: 35)
+                // Крест
+                Rectangle().fill(Color(white: 0.3)).frame(width: 40, height: 2)
+                Rectangle().fill(Color(white: 0.3)).frame(width: 2, height: 35)
+            }
+            .offset(x: 70, y: -50)
 
-            // Пол — тёплый деревянный
-            IsometricFloor()
-                .fill(
-                    LinearGradient(
-                        colors: [floorColor, floorColor.opacity(0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 200, height: 100)
-                .shadow(color: Color.black.opacity(0.3), radius: 5, y: 3)
+            // Полка слева
+            ZStack {
+                // Полка
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color(white: 0.28))
+                    .frame(width: 50, height: 4)
+                    .offset(y: 8)
+                // Предметы на полке
+                HStack(spacing: 5) {
+                    if collectedItems.isEmpty {
+                        Text("🪴").font(.system(size: 12))
+                    } else {
+                        ForEach(collectedItems.suffix(3)) { item in
+                            Text(item.type.emoji).font(.system(size: 11))
+                        }
+                    }
+                }
+            }
+            .offset(x: -80, y: -45)
 
-            // Левая стена
-            IsometricWallLeft()
-                .fill(
-                    LinearGradient(
-                        colors: [wallColorLeft, wallColorLeft.opacity(0.85)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 100, height: 85)
-                .offset(x: -50, y: -42)
-
-            // Правая стена
-            IsometricWallRight()
-                .fill(
-                    LinearGradient(
-                        colors: [wallColorRight, wallColorRight.opacity(0.9)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 100, height: 85)
-                .offset(x: 50, y: -42)
-
-            // === ДЕКОР ЛЕВОЙ СТЕНЫ ===
-
-            // Картина/постер на стене
+            // Картина
             ZStack {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(woodColor)
-                    .frame(width: 28, height: 22)
+                    .fill(Color(white: 0.25))
+                    .frame(width: 30, height: 24)
                 RoundedRectangle(cornerRadius: 1)
                     .fill(
                         LinearGradient(
-                            colors: [Color.purple.opacity(0.4), Color.blue.opacity(0.3)],
+                            colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 24, height: 18)
-                // Маленькие звёзды на картине
-                Text("✨")
-                    .font(.system(size: 8))
+                    .frame(width: 26, height: 20)
+                Text("🌙").font(.system(size: 10))
             }
-            .offset(x: -55, y: -60)
+            .offset(x: -30, y: -55)
 
-            // Полка с предметами
-            VStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    ForEach(collectedItems.suffix(3)) { item in
-                        Text(item.type.emoji)
-                            .font(.system(size: 11))
-                    }
-                    if collectedItems.isEmpty {
-                        Text("🪴")
-                            .font(.system(size: 11))
-                    }
-                }
-                Rectangle()
-                    .fill(woodColor)
-                    .frame(width: 40, height: 3)
-                    .shadow(color: Color.black.opacity(0.3), radius: 2, y: 1)
-            }
-            .offset(x: -35, y: -38)
-
-            // === ДЕКОР ПРАВОЙ СТЕНЫ ===
-
-            // Окно с тёплым светом
-            ZStack {
-                // Свет из окна
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [accentWarm.opacity(0.3), accentWarm.opacity(0.1)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 30, height: 26)
-
-                // Рама окна
-                Rectangle()
-                    .stroke(woodColor, lineWidth: 2)
-                    .frame(width: 30, height: 26)
-
-                // Крест окна
-                Rectangle()
-                    .fill(woodColor)
-                    .frame(width: 30, height: 2)
-                Rectangle()
-                    .fill(woodColor)
-                    .frame(width: 2, height: 26)
-            }
-            .offset(x: 55, y: -58)
-
-            // Часы на стене
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.9))
-                    .frame(width: 14, height: 14)
-                Circle()
-                    .stroke(woodColor, lineWidth: 1.5)
-                    .frame(width: 14, height: 14)
-                // Стрелки
-                Rectangle()
-                    .fill(Color.black)
-                    .frame(width: 1, height: 4)
-                    .offset(y: -1.5)
-                Rectangle()
-                    .fill(Color.black)
-                    .frame(width: 3, height: 1)
-                    .offset(x: 1)
-            }
-            .offset(x: 60, y: -35)
-
-            // === МЕБЕЛЬ ===
-
-            // Уютный коврик
+            // Коврик
             Ellipse()
                 .fill(
                     RadialGradient(
-                        colors: [Color.orange.opacity(0.25), Color.red.opacity(0.15)],
+                        colors: [Color.orange.opacity(0.2), Color.red.opacity(0.1)],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 25
+                        endRadius: 30
                     )
                 )
-                .frame(width: 55, height: 28)
-                .offset(y: 28)
+                .frame(width: 70, height: 25)
+                .offset(y: 55)
 
-            // Маленький столик справа
-            ZStack {
-                // Ножки
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(woodColor.opacity(0.8))
-                    .frame(width: 3, height: 12)
-                    .offset(x: -8, y: 6)
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(woodColor.opacity(0.8))
-                    .frame(width: 3, height: 12)
-                    .offset(x: 8, y: 6)
-                // Столешница
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(woodColor)
-                    .frame(width: 24, height: 4)
-                    .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
-                // Лампа на столе
-                ZStack {
-                    // Основание лампы
-                    Ellipse()
-                        .fill(Color.gray.opacity(0.6))
-                        .frame(width: 8, height: 4)
-                        .offset(y: 2)
-                    // Абажур
-                    Trapezoid()
-                        .fill(accentWarm.opacity(0.7))
-                        .frame(width: 12, height: 10)
-                        .offset(y: -5)
-                    // Свечение лампы
-                    Circle()
-                        .fill(accentWarm.opacity(0.5))
-                        .frame(width: 6, height: 6)
-                        .blur(radius: 3)
-                        .offset(y: -3)
-                }
-                .offset(y: -8)
-            }
-            .offset(x: 60, y: 18)
-
-            // === РОБОТ ===
-
-            // Только тело робота (без дублирования головы)
-            FullRobotBody(
+            // Робот (маленький!)
+            SmallRobot(
                 mood: mood,
                 eyeOffset: eyeOffset,
                 isBlinking: isBlinking,
                 antennaGlow: antennaGlow,
-                accessory: accessory,
                 isCrafting: craftingItem != nil
             )
-            .offset(y: 0)
+            .offset(y: 15)
 
-            // === КРАФТ ===
-
+            // Крафт рядом с роботом
             if let craft = craftingItem {
-                VStack(spacing: 4) {
-                    // Корзинка с пряжей
-                    ZStack {
-                        Ellipse()
-                            .fill(woodColor.opacity(0.8))
-                            .frame(width: 20, height: 10)
-                        Text(craft.type.emoji)
-                            .font(.system(size: 12))
-                            .offset(y: -6)
-                            .opacity(0.4 + craft.progress * 0.6)
-                    }
+                VStack(spacing: 2) {
+                    Text(craft.type.emoji)
+                        .font(.system(size: 14))
+                        .opacity(0.4 + craft.progress * 0.6)
                     // Прогресс
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Color.white.opacity(0.1))
-                            .frame(width: 26, height: 4)
+                            .fill(Color.white.opacity(0.15))
+                            .frame(width: 24, height: 3)
                         Capsule()
-                            .fill(Color(hex: craft.color) ?? accentWarm)
-                            .frame(width: 26 * craft.progress, height: 4)
+                            .fill(Color(hex: craft.color) ?? warmGlow)
+                            .frame(width: 24 * craft.progress, height: 3)
                     }
                 }
-                .offset(x: -50, y: 20)
+                .offset(x: -55, y: 45)
             }
+
+            // Столик справа
+            ZStack {
+                // Ножки
+                Rectangle().fill(Color(white: 0.25)).frame(width: 2, height: 15).offset(x: -8, y: 5)
+                Rectangle().fill(Color(white: 0.25)).frame(width: 2, height: 15).offset(x: 8, y: 5)
+                // Столешница
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(white: 0.3))
+                    .frame(width: 22, height: 4)
+                // Кружка
+                Text("☕").font(.system(size: 10)).offset(y: -8)
+            }
+            .offset(x: 75, y: 40)
         }
     }
 }
 
-// Форма абажура лампы
-struct Trapezoid: Shape {
+// Задняя стена (простой прямоугольник с затемнением углов)
+struct BackWall: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let inset: CGFloat = rect.width * 0.2
-        path.move(to: CGPoint(x: inset, y: rect.maxY))
-        path.addLine(to: CGPoint(x: 0, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.maxY))
+        path.addRect(rect)
+        return path
+    }
+}
+
+// Пол (трапеция для перспективы)
+struct FloorPlane: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let inset: CGFloat = 20
+        path.move(to: CGPoint(x: inset, y: 0))
+        path.addLine(to: CGPoint(x: rect.width - inset, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
+        path.addLine(to: CGPoint(x: 0, y: rect.height))
         path.closeSubpath()
         return path
+    }
+}
+
+// Маленький робот для комнаты
+struct SmallRobot: View {
+    let mood: RobotMood
+    let eyeOffset: CGSize
+    let isBlinking: Bool
+    let antennaGlow: Bool
+    var isCrafting: Bool = false
+
+    @State private var breathe: CGFloat = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Антенна
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(mood.eyeColor)
+                    .frame(width: 5, height: 5)
+                    .shadow(color: mood.eyeColor.opacity(antennaGlow ? 0.8 : 0.3), radius: antennaGlow ? 4 : 1)
+                Rectangle()
+                    .fill(Color(white: 0.4))
+                    .frame(width: 1.5, height: 4)
+            }
+
+            // Голова
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(white: 0.28))
+                    .frame(width: 32, height: 22)
+
+                // Экран
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.black)
+                    .frame(width: 28, height: 16)
+
+                // Глаза
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(mood.eyeColor)
+                        .frame(width: isBlinking ? 8 : 8, height: isBlinking ? 2 : 8)
+                        .shadow(color: mood.eyeColor.opacity(0.5), radius: 2)
+                    Circle()
+                        .fill(mood.eyeColor)
+                        .frame(width: isBlinking ? 8 : 8, height: isBlinking ? 2 : 8)
+                        .shadow(color: mood.eyeColor.opacity(0.5), radius: 2)
+                }
+                .offset(y: -1)
+
+                // Рот
+                if mood == .happy || mood == .love {
+                    Path { p in
+                        p.move(to: CGPoint(x: 0, y: 0))
+                        p.addQuadCurve(to: CGPoint(x: 8, y: 0), control: CGPoint(x: 4, y: 4))
+                    }
+                    .stroke(mood.eyeColor, lineWidth: 1.5)
+                    .frame(width: 8, height: 4)
+                    .offset(y: 5)
+                }
+            }
+            .offset(y: breathe * 0.3)
+
+            // Тело
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(white: 0.28))
+                    .frame(width: 28, height: 22)
+
+                // Индикатор
+                Circle()
+                    .fill(mood.eyeColor)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: mood.eyeColor.opacity(0.5), radius: 3)
+                    .offset(y: -3)
+
+                // Руки
+                HStack(spacing: 26) {
+                    Capsule()
+                        .fill(Color(white: 0.32))
+                        .frame(width: 5, height: 12)
+                        .rotationEffect(.degrees(isCrafting ? 10 : -5))
+                    Capsule()
+                        .fill(Color(white: 0.32))
+                        .frame(width: 5, height: 12)
+                        .rotationEffect(.degrees(isCrafting ? -10 : 5))
+                }
+            }
+            .offset(y: breathe)
+
+            // Ноги
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(white: 0.25))
+                    .frame(width: 8, height: 10)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(white: 0.25))
+                    .frame(width: 8, height: 10)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                breathe = 1.5
+            }
+        }
     }
 }
 
