@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSCameraUsageDescription</key>
+    <string>FocusBuddy uses the camera to see if you're working. The robot is watching you!</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>FocusBuddy wants to check which site is open in your browser to know when you're distracted.</string>
+</dict>
+</plist>
