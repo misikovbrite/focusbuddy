@@ -1896,11 +1896,11 @@ struct ExtendedNotchView: View {
 
     // Размеры при наведении и расширении
     private var currentWidth: CGFloat {
-        if isExpanded { return 380 }
+        if isExpanded { return 420 }
         return isHovered ? baseWidth * 1.02 : baseWidth  // Subtle hover effect
     }
     private var currentHeight: CGFloat {
-        if isExpanded { return 160 }
+        if isExpanded { return 220 }
         return isHovered ? baseHeight * 1.02 : baseHeight  // Subtle hover effect
     }
 
@@ -2249,9 +2249,9 @@ struct ExtendedNotchView: View {
     // MARK: - Расширенный контент (минималистичный стиль Dynamic Island)
 
     var expandedContent: some View {
-        VStack(spacing: 4) {
-            // Компактные кнопки сверху
-            HStack(spacing: 8) {
+        HStack(spacing: 0) {
+            // Левая панель — кнопки вертикально
+            VStack(spacing: 6) {
                 TinyButton(icon: settings.isPaused ? "play.fill" : "pause.fill") {
                     onTogglePause?()
                     collapsePanel()
@@ -2263,56 +2263,71 @@ struct ExtendedNotchView: View {
                         collapsePanel()
                     }
                 } else {
-                    // Таймер с временем
-                    HStack(spacing: 4) {
-                        Text(settings.pomodoroTimeFormatted)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundColor(settings.pomodoroState == .onBreak ? .cyan : .green)
-
-                        TinyButton(icon: "stop.fill") {
-                            onStopPomodoro?()
-                            collapsePanel()
-                        }
+                    TinyButton(icon: "stop.fill") {
+                        onStopPomodoro?()
+                        collapsePanel()
                     }
                 }
 
                 Spacer()
-
-                // Мини-статистика
-                HStack(spacing: 6) {
-                    Text("🧦\(settings.collectedItems.count)")
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.6))
-
-                    Text(viewModel.focusStats.formattedFocusedTime)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.7))
-                }
 
                 TinyButton(icon: "gearshape") {
                     onOpenSettings?()
                     collapsePanel()
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
+            .padding(.leading, 10)
+            .padding(.vertical, 12)
 
-            // Изометрическая комнатка с роботом
-            IsometricRoom(
-                mood: viewModel.attentionState.mood,
-                eyeOffset: effectiveEyeOffset,
-                isBlinking: isBlinking,
-                antennaGlow: antennaGlow,
-                accessory: settings.robotAccessory,
-                craftingItem: settings.currentCraft,
-                collectedItems: settings.collectedItems
-            )
-            .frame(height: 80)
-            .padding(.bottom, 4)
+            // Центр — большая изометрическая комната
+            VStack(spacing: 2) {
+                // Таймер сверху (если активен)
+                if settings.pomodoroState != .idle {
+                    Text(settings.pomodoroTimeFormatted)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundColor(settings.pomodoroState == .onBreak ? .cyan : .green)
+                }
+
+                IsometricRoom(
+                    mood: viewModel.attentionState.mood,
+                    eyeOffset: effectiveEyeOffset,
+                    isBlinking: isBlinking,
+                    antennaGlow: antennaGlow,
+                    accessory: settings.robotAccessory,
+                    craftingItem: settings.currentCraft,
+                    collectedItems: settings.collectedItems
+                )
+                .scaleEffect(1.4)
+            }
+            .frame(maxWidth: .infinity)
+
+            // Правая панель — статистика
+            VStack(alignment: .trailing, spacing: 4) {
+                // Время фокуса
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(viewModel.focusStats.formattedFocusedTime)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.8))
+                    Text("focus")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+
+                Spacer()
+
+                // Коллекция
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("🧦 \(settings.collectedItems.count)")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+            .padding(.trailing, 10)
+            .padding(.vertical, 12)
         }
     }
 
-    // Маленькая кнопка для верхней панели
+    // Маленькая кнопка
     struct TinyButton: View {
         let icon: String
         let action: () -> Void
@@ -2320,11 +2335,11 @@ struct ExtendedNotchView: View {
         var body: some View {
             Button(action: action) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 20, height: 20)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(4)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .frame(width: 22, height: 22)
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(5)
             }
             .buttonStyle(.plain)
         }
@@ -3240,8 +3255,31 @@ struct IsometricRoom: View {
 
     var body: some View {
         ZStack {
-            // Пол комнаты (изометрический ромб)
+            // Пол комнаты (изометрический ромб) — побольше
             IsometricFloor()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(white: 0.16), Color(white: 0.11)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 180, height: 90)
+
+            // Левая стена — выше
+            IsometricWallLeft()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(white: 0.20), Color(white: 0.16)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 90, height: 75)
+                .offset(x: -45, y: -38)
+
+            // Правая стена
+            IsometricWallRight()
                 .fill(
                     LinearGradient(
                         colors: [Color(white: 0.15), Color(white: 0.12)],
@@ -3249,40 +3287,54 @@ struct IsometricRoom: View {
                         endPoint: .bottom
                     )
                 )
-                .frame(width: 120, height: 60)
+                .frame(width: 90, height: 75)
+                .offset(x: 45, y: -38)
 
-            // Левая стена
-            IsometricWallLeft()
-                .fill(Color(white: 0.18))
-                .frame(width: 60, height: 50)
-                .offset(x: -30, y: -25)
-
-            // Правая стена
-            IsometricWallRight()
-                .fill(Color(white: 0.14))
-                .frame(width: 60, height: 50)
-                .offset(x: 30, y: -25)
-
-            // Полочка на стене с собранными предметами
+            // Полочка на левой стене с собранными предметами
             if !collectedItems.isEmpty {
-                HStack(spacing: 2) {
-                    ForEach(collectedItems.suffix(3)) { item in
-                        Text(item.type.emoji)
-                            .font(.system(size: 8))
+                VStack(spacing: 1) {
+                    // Полка
+                    Rectangle()
+                        .fill(Color(white: 0.25))
+                        .frame(width: 30, height: 2)
+                    HStack(spacing: 3) {
+                        ForEach(collectedItems.suffix(4)) { item in
+                            Text(item.type.emoji)
+                                .font(.system(size: 10))
+                        }
                     }
+                    .offset(y: -8)
                 }
-                .offset(x: -25, y: -35)
+                .offset(x: -38, y: -50)
             }
 
-            // Окошко на правой стене
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.cyan.opacity(0.2))
-                .frame(width: 15, height: 12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-                )
-                .offset(x: 35, y: -35)
+            // Окошко на правой стене — побольше
+            ZStack {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.cyan.opacity(0.15), Color.blue.opacity(0.1)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 22, height: 18)
+                // Рама окна
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .frame(width: 22, height: 18)
+                // Перекладина
+                Rectangle()
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: 22, height: 0.5)
+            }
+            .offset(x: 52, y: -52)
+
+            // Коврик на полу
+            Ellipse()
+                .fill(Color(white: 0.2))
+                .frame(width: 40, height: 20)
+                .offset(y: 25)
 
             // Робот с телом в центре комнаты
             FullRobot(
@@ -3293,28 +3345,33 @@ struct IsometricRoom: View {
                 accessory: accessory,
                 isCrafting: craftingItem != nil
             )
-            .offset(y: -5)
+            .scaleEffect(1.1)
+            .offset(y: -8)
 
             // Крафтящийся предмет рядом с роботом
             if let craft = craftingItem {
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     Text(craft.type.emoji)
-                        .font(.system(size: 10))
+                        .font(.system(size: 14))
                         .opacity(0.3 + craft.progress * 0.7)
-                    // Маленький прогресс-бар
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(Color.white.opacity(0.2))
-                        .frame(width: 16, height: 2)
-                        .overlay(
-                            GeometryReader { geo in
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(Color(hex: craft.color) ?? .cyan)
-                                    .frame(width: geo.size.width * craft.progress)
-                            }
-                        )
+                    // Прогресс-бар
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.15))
+                            .frame(width: 24, height: 3)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(hex: craft.color) ?? .cyan)
+                            .frame(width: 24 * craft.progress, height: 3)
+                    }
                 }
-                .offset(x: 25, y: 8)
+                .offset(x: 40, y: 10)
             }
+
+            // Маленький столик/тумбочка справа
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color(white: 0.22))
+                .frame(width: 18, height: 14)
+                .offset(x: 55, y: 15)
         }
     }
 }
