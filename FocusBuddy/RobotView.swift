@@ -206,7 +206,7 @@ struct MouthView: View {
             switch state {
             case .focused:
                 // Улыбка
-                MouthShape(smile: true)
+                SmileMouthShape(smile: true)
                     .stroke(Color.green, lineWidth: 3)
                     .frame(width: 50, height: 20)
 
@@ -218,13 +218,13 @@ struct MouthView: View {
 
             case .distracted:
                 // Грустный рот
-                MouthShape(smile: false)
+                SmileMouthShape(smile: false)
                     .stroke(Color.red, lineWidth: 3)
                     .frame(width: 50, height: 20)
 
             case .welcomeBack:
                 // Большая улыбка
-                MouthShape(smile: true)
+                SmileMouthShape(smile: true)
                     .stroke(Color.cyan, lineWidth: 4)
                     .frame(width: 60, height: 25)
             }
@@ -232,7 +232,7 @@ struct MouthView: View {
     }
 }
 
-struct MouthShape: Shape {
+struct SmileMouthShape: Shape {
     let smile: Bool
 
     func path(in rect: CGRect) -> Path {

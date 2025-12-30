@@ -3655,7 +3655,7 @@ struct FullRobotBody: View {
                 .offset(y: -2)
 
                 // Рот
-                MouthShape(mood: mood)
+                RobotMouthShape(mood: mood)
                     .offset(y: 6)
 
                 // Щёчки (румянец)
@@ -3807,7 +3807,7 @@ struct FullRobotBody: View {
 }
 
 // Форма рта для FullRobotBody
-struct MouthShape: View {
+struct RobotMouthShape: View {
     let mood: RobotMood
 
     var body: some View {
