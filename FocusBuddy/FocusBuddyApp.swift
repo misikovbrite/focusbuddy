@@ -3253,91 +3253,217 @@ struct IsometricRoom: View {
     let craftingItem: CraftingItem?
     let collectedItems: [CollectedItem]
 
+    // Тёплые цвета для уютной комнаты
+    private let floorColor = Color(red: 0.22, green: 0.18, blue: 0.14)
+    private let wallColorLeft = Color(red: 0.28, green: 0.22, blue: 0.18)
+    private let wallColorRight = Color(red: 0.20, green: 0.16, blue: 0.13)
+    private let accentWarm = Color(red: 1.0, green: 0.85, blue: 0.5)
+    private let woodColor = Color(red: 0.4, green: 0.28, blue: 0.18)
+
     var body: some View {
         ZStack {
-            // Пол комнаты (изометрический ромб) — побольше
+            // === ФОН И СВЕТ ===
+
+            // Мягкое свечение от лампы
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [accentWarm.opacity(0.15), Color.clear],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 80
+                    )
+                )
+                .frame(width: 160, height: 160)
+                .offset(x: -30, y: -40)
+
+            // === КОМНАТА ===
+
+            // Пол — тёплый деревянный
             IsometricFloor()
                 .fill(
                     LinearGradient(
-                        colors: [Color(white: 0.16), Color(white: 0.11)],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        colors: [floorColor, floorColor.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 180, height: 90)
+                .frame(width: 200, height: 100)
+                .shadow(color: Color.black.opacity(0.3), radius: 5, y: 3)
 
-            // Левая стена — выше
+            // Левая стена
             IsometricWallLeft()
                 .fill(
                     LinearGradient(
-                        colors: [Color(white: 0.20), Color(white: 0.16)],
+                        colors: [wallColorLeft, wallColorLeft.opacity(0.85)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .frame(width: 90, height: 75)
-                .offset(x: -45, y: -38)
+                .frame(width: 100, height: 85)
+                .offset(x: -50, y: -42)
 
             // Правая стена
             IsometricWallRight()
                 .fill(
                     LinearGradient(
-                        colors: [Color(white: 0.15), Color(white: 0.12)],
+                        colors: [wallColorRight, wallColorRight.opacity(0.9)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .frame(width: 90, height: 75)
-                .offset(x: 45, y: -38)
+                .frame(width: 100, height: 85)
+                .offset(x: 50, y: -42)
 
-            // Полочка на левой стене с собранными предметами
-            if !collectedItems.isEmpty {
-                VStack(spacing: 1) {
-                    // Полка
-                    Rectangle()
-                        .fill(Color(white: 0.25))
-                        .frame(width: 30, height: 2)
-                    HStack(spacing: 3) {
-                        ForEach(collectedItems.suffix(4)) { item in
-                            Text(item.type.emoji)
-                                .font(.system(size: 10))
-                        }
-                    }
-                    .offset(y: -8)
-                }
-                .offset(x: -38, y: -50)
-            }
+            // === ДЕКОР ЛЕВОЙ СТЕНЫ ===
 
-            // Окошко на правой стене — побольше
+            // Картина/постер на стене
             ZStack {
-                RoundedRectangle(cornerRadius: 3)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(woodColor)
+                    .frame(width: 28, height: 22)
+                RoundedRectangle(cornerRadius: 1)
                     .fill(
                         LinearGradient(
-                            colors: [Color.cyan.opacity(0.15), Color.blue.opacity(0.1)],
+                            colors: [Color.purple.opacity(0.4), Color.blue.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 24, height: 18)
+                // Маленькие звёзды на картине
+                Text("✨")
+                    .font(.system(size: 8))
+            }
+            .offset(x: -55, y: -60)
+
+            // Полка с предметами
+            VStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    ForEach(collectedItems.suffix(3)) { item in
+                        Text(item.type.emoji)
+                            .font(.system(size: 11))
+                    }
+                    if collectedItems.isEmpty {
+                        Text("🪴")
+                            .font(.system(size: 11))
+                    }
+                }
+                Rectangle()
+                    .fill(woodColor)
+                    .frame(width: 40, height: 3)
+                    .shadow(color: Color.black.opacity(0.3), radius: 2, y: 1)
+            }
+            .offset(x: -35, y: -38)
+
+            // === ДЕКОР ПРАВОЙ СТЕНЫ ===
+
+            // Окно с тёплым светом
+            ZStack {
+                // Свет из окна
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [accentWarm.opacity(0.3), accentWarm.opacity(0.1)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 22, height: 18)
+                    .frame(width: 30, height: 26)
+
                 // Рама окна
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    .frame(width: 22, height: 18)
-                // Перекладина
                 Rectangle()
-                    .fill(Color.white.opacity(0.15))
-                    .frame(width: 22, height: 0.5)
+                    .stroke(woodColor, lineWidth: 2)
+                    .frame(width: 30, height: 26)
+
+                // Крест окна
+                Rectangle()
+                    .fill(woodColor)
+                    .frame(width: 30, height: 2)
+                Rectangle()
+                    .fill(woodColor)
+                    .frame(width: 2, height: 26)
             }
-            .offset(x: 52, y: -52)
+            .offset(x: 55, y: -58)
 
-            // Коврик на полу
+            // Часы на стене
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 14, height: 14)
+                Circle()
+                    .stroke(woodColor, lineWidth: 1.5)
+                    .frame(width: 14, height: 14)
+                // Стрелки
+                Rectangle()
+                    .fill(Color.black)
+                    .frame(width: 1, height: 4)
+                    .offset(y: -1.5)
+                Rectangle()
+                    .fill(Color.black)
+                    .frame(width: 3, height: 1)
+                    .offset(x: 1)
+            }
+            .offset(x: 60, y: -35)
+
+            // === МЕБЕЛЬ ===
+
+            // Уютный коврик
             Ellipse()
-                .fill(Color(white: 0.2))
-                .frame(width: 40, height: 20)
-                .offset(y: 25)
+                .fill(
+                    RadialGradient(
+                        colors: [Color.orange.opacity(0.25), Color.red.opacity(0.15)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 25
+                    )
+                )
+                .frame(width: 55, height: 28)
+                .offset(y: 28)
 
-            // Робот с телом в центре комнаты
-            FullRobot(
+            // Маленький столик справа
+            ZStack {
+                // Ножки
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(woodColor.opacity(0.8))
+                    .frame(width: 3, height: 12)
+                    .offset(x: -8, y: 6)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(woodColor.opacity(0.8))
+                    .frame(width: 3, height: 12)
+                    .offset(x: 8, y: 6)
+                // Столешница
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(woodColor)
+                    .frame(width: 24, height: 4)
+                    .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
+                // Лампа на столе
+                ZStack {
+                    // Основание лампы
+                    Ellipse()
+                        .fill(Color.gray.opacity(0.6))
+                        .frame(width: 8, height: 4)
+                        .offset(y: 2)
+                    // Абажур
+                    Trapezoid()
+                        .fill(accentWarm.opacity(0.7))
+                        .frame(width: 12, height: 10)
+                        .offset(y: -5)
+                    // Свечение лампы
+                    Circle()
+                        .fill(accentWarm.opacity(0.5))
+                        .frame(width: 6, height: 6)
+                        .blur(radius: 3)
+                        .offset(y: -3)
+                }
+                .offset(y: -8)
+            }
+            .offset(x: 60, y: 18)
+
+            // === РОБОТ ===
+
+            // Только тело робота (без дублирования головы)
+            FullRobotBody(
                 mood: mood,
                 eyeOffset: eyeOffset,
                 isBlinking: isBlinking,
@@ -3345,34 +3471,49 @@ struct IsometricRoom: View {
                 accessory: accessory,
                 isCrafting: craftingItem != nil
             )
-            .scaleEffect(1.1)
-            .offset(y: -8)
+            .offset(y: 0)
 
-            // Крафтящийся предмет рядом с роботом
+            // === КРАФТ ===
+
             if let craft = craftingItem {
-                VStack(spacing: 3) {
-                    Text(craft.type.emoji)
-                        .font(.system(size: 14))
-                        .opacity(0.3 + craft.progress * 0.7)
-                    // Прогресс-бар
+                VStack(spacing: 4) {
+                    // Корзинка с пряжей
+                    ZStack {
+                        Ellipse()
+                            .fill(woodColor.opacity(0.8))
+                            .frame(width: 20, height: 10)
+                        Text(craft.type.emoji)
+                            .font(.system(size: 12))
+                            .offset(y: -6)
+                            .opacity(0.4 + craft.progress * 0.6)
+                    }
+                    // Прогресс
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.white.opacity(0.15))
-                            .frame(width: 24, height: 3)
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color(hex: craft.color) ?? .cyan)
-                            .frame(width: 24 * craft.progress, height: 3)
+                        Capsule()
+                            .fill(Color.white.opacity(0.1))
+                            .frame(width: 26, height: 4)
+                        Capsule()
+                            .fill(Color(hex: craft.color) ?? accentWarm)
+                            .frame(width: 26 * craft.progress, height: 4)
                     }
                 }
-                .offset(x: 40, y: 10)
+                .offset(x: -50, y: 20)
             }
-
-            // Маленький столик/тумбочка справа
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(white: 0.22))
-                .frame(width: 18, height: 14)
-                .offset(x: 55, y: 15)
         }
+    }
+}
+
+// Форма абажура лампы
+struct Trapezoid: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let inset: CGFloat = rect.width * 0.2
+        path.move(to: CGPoint(x: inset, y: rect.maxY))
+        path.addLine(to: CGPoint(x: 0, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -3427,9 +3568,9 @@ struct IsometricWallRight: Shape {
     }
 }
 
-// MARK: - Полный робот с телом
+// MARK: - Полный робот с телом (для изометрической комнаты)
 
-struct FullRobot: View {
+struct FullRobotBody: View {
     let mood: RobotMood
     let eyeOffset: CGSize
     let isBlinking: Bool
@@ -3440,114 +3581,269 @@ struct FullRobot: View {
     @State private var breathe: CGFloat = 0
     @State private var craftingArmAngle: Double = 0
 
+    private let bodyColor = Color(red: 0.25, green: 0.25, blue: 0.28)
+    private let metalColor = Color(red: 0.35, green: 0.35, blue: 0.4)
+
     var body: some View {
         VStack(spacing: 0) {
-            // Голова (используем существующий RobotFace)
-            RobotFace(
-                mood: mood,
-                eyeOffset: eyeOffset,
-                isBlinking: isBlinking,
-                eyeSquint: 1.0,
-                antennaGlow: antennaGlow,
-                headTilt: 0,
-                bounce: 0,
-                accessory: accessory
-            )
-            .scaleEffect(1.8)
-            .offset(y: breathe * 0.5)
-
-            // Шея
-            Rectangle()
-                .fill(Color(white: 0.2))
-                .frame(width: 6, height: 4)
-                .offset(y: -2)
-
-            // Тело (пузатое, минималистичное)
+            // === ГОЛОВА ===
             ZStack {
-                // Основное тело
+                // Антенна
+                VStack(spacing: 0) {
+                    Circle()
+                        .fill(mood.eyeColor)
+                        .frame(width: 6, height: 6)
+                        .shadow(color: mood.eyeColor.opacity(antennaGlow ? 0.8 : 0.4), radius: antennaGlow ? 5 : 2)
+                    Rectangle()
+                        .fill(metalColor)
+                        .frame(width: 2, height: 5)
+                }
+                .offset(y: -22)
+
+                // Голова
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(white: 0.18))
-                    .frame(width: 28, height: 24)
+                    .fill(bodyColor)
+                    .frame(width: 40, height: 28)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color(white: 0.25), lineWidth: 0.5)
+                            .stroke(metalColor, lineWidth: 1)
                     )
 
-                // Кнопка/индикатор на груди
-                Circle()
-                    .fill(mood.eyeColor.opacity(0.7))
-                    .frame(width: 5, height: 5)
-                    .shadow(color: mood.eyeColor.opacity(0.5), radius: 2)
+                // Экран лица
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.black)
+                    .frame(width: 34, height: 20)
+
+                // Глаза
+                HStack(spacing: 8) {
+                    // Левый глаз
+                    ZStack {
+                        Ellipse()
+                            .fill(mood.eyeColor)
+                            .frame(width: isBlinking ? 10 : 10, height: isBlinking ? 2 : 10)
+                            .shadow(color: mood.eyeColor.opacity(0.6), radius: 3)
+                        if !isBlinking {
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 5, height: 5)
+                                .offset(x: eyeOffset.width * 1.5, y: eyeOffset.height * 1.5)
+                            Circle()
+                                .fill(Color.white.opacity(0.8))
+                                .frame(width: 2, height: 2)
+                                .offset(x: 2, y: -2)
+                        }
+                    }
+
+                    // Правый глаз
+                    ZStack {
+                        Ellipse()
+                            .fill(mood.eyeColor)
+                            .frame(width: isBlinking ? 10 : 10, height: isBlinking ? 2 : 10)
+                            .shadow(color: mood.eyeColor.opacity(0.6), radius: 3)
+                        if !isBlinking {
+                            Circle()
+                                .fill(Color.black)
+                                .frame(width: 5, height: 5)
+                                .offset(x: eyeOffset.width * 1.5, y: eyeOffset.height * 1.5)
+                            Circle()
+                                .fill(Color.white.opacity(0.8))
+                                .frame(width: 2, height: 2)
+                                .offset(x: 2, y: -2)
+                        }
+                    }
+                }
+                .offset(y: -2)
+
+                // Рот
+                MouthShape(mood: mood)
+                    .offset(y: 6)
+
+                // Щёчки (румянец)
+                if mood == .happy || mood == .love || mood == .celebrating {
+                    HStack(spacing: 26) {
+                        Circle()
+                            .fill(Color.pink.opacity(0.4))
+                            .frame(width: 6, height: 6)
+                            .blur(radius: 2)
+                        Circle()
+                            .fill(Color.pink.opacity(0.4))
+                            .frame(width: 6, height: 6)
+                            .blur(radius: 2)
+                    }
+                    .offset(y: 2)
+                }
+
+                // Аксессуар
+                if accessory == .glasses {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .stroke(Color.gray, lineWidth: 1.5)
+                            .frame(width: 12, height: 12)
+                        Circle()
+                            .stroke(Color.gray, lineWidth: 1.5)
+                            .frame(width: 12, height: 12)
+                    }
+                    .offset(y: -2)
+                } else if accessory == .crown {
+                    Text("👑")
+                        .font(.system(size: 14))
+                        .offset(y: -22)
+                } else if accessory == .topHat {
+                    VStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.black)
+                            .frame(width: 18, height: 12)
+                        Rectangle()
+                            .fill(Color.black)
+                            .frame(width: 26, height: 3)
+                    }
+                    .offset(y: -24)
+                }
+            }
+            .offset(y: breathe * 0.5)
+
+            // === ШЕЯ ===
+            Rectangle()
+                .fill(metalColor)
+                .frame(width: 10, height: 6)
+                .offset(y: -2)
+
+            // === ТЕЛО ===
+            ZStack {
+                // Основное тело (пузатое)
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(bodyColor)
+                    .frame(width: 44, height: 36)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(metalColor, lineWidth: 1)
+                    )
+
+                // Грудная панель
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.black.opacity(0.3))
+                    .frame(width: 24, height: 16)
                     .offset(y: -4)
 
+                // Индикатор на груди
+                Circle()
+                    .fill(mood.eyeColor)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: mood.eyeColor.opacity(0.7), radius: 4)
+                    .offset(y: -4)
+
+                // Кнопки на теле
+                HStack(spacing: 3) {
+                    Circle().fill(Color.red.opacity(0.6)).frame(width: 4, height: 4)
+                    Circle().fill(Color.yellow.opacity(0.6)).frame(width: 4, height: 4)
+                    Circle().fill(Color.green.opacity(0.6)).frame(width: 4, height: 4)
+                }
+                .offset(y: 8)
+
                 // Руки
-                HStack(spacing: 24) {
+                HStack(spacing: 38) {
                     // Левая рука
-                    RobotArm(isLeft: true, isWaving: false)
-                        .rotationEffect(.degrees(isCrafting ? craftingArmAngle : 0), anchor: .top)
+                    VStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(bodyColor)
+                            .frame(width: 8, height: 18)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(metalColor, lineWidth: 0.5))
+                        Circle()
+                            .fill(metalColor)
+                            .frame(width: 10, height: 10)
+                    }
+                    .rotationEffect(.degrees(isCrafting ? craftingArmAngle : -5), anchor: .top)
 
                     // Правая рука
-                    RobotArm(isLeft: false, isWaving: false)
-                        .rotationEffect(.degrees(isCrafting ? -craftingArmAngle * 0.5 : 0), anchor: .top)
+                    VStack(spacing: 0) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(bodyColor)
+                            .frame(width: 8, height: 18)
+                            .overlay(RoundedRectangle(cornerRadius: 3).stroke(metalColor, lineWidth: 0.5))
+                        Circle()
+                            .fill(metalColor)
+                            .frame(width: 10, height: 10)
+                    }
+                    .rotationEffect(.degrees(isCrafting ? -craftingArmAngle * 0.7 : 5), anchor: .top)
                 }
             }
             .offset(y: breathe)
 
-            // Ноги
-            HStack(spacing: 6) {
-                RobotLeg()
-                RobotLeg()
+            // === НОГИ ===
+            HStack(spacing: 8) {
+                // Левая нога
+                VStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(bodyColor)
+                        .frame(width: 10, height: 14)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(metalColor)
+                        .frame(width: 14, height: 5)
+                }
+
+                // Правая нога
+                VStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(bodyColor)
+                        .frame(width: 10, height: 14)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(metalColor)
+                        .frame(width: 14, height: 5)
+                }
             }
             .offset(y: breathe * 0.3)
         }
         .onAppear {
-            // Дыхание
-            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-                breathe = 1.5
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                breathe = 2
             }
-            // Анимация крафтинга
             if isCrafting {
-                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                    craftingArmAngle = 15
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                    craftingArmAngle = 20
                 }
             }
         }
     }
 }
 
-// Рука робота
-struct RobotArm: View {
-    let isLeft: Bool
-    var isWaving: Bool = false
+// Форма рта для FullRobotBody
+struct MouthShape: View {
+    let mood: RobotMood
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Плечо
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(white: 0.2))
-                .frame(width: 4, height: 10)
-
-            // Кисть
-            Circle()
-                .fill(Color(white: 0.22))
-                .frame(width: 5, height: 5)
-        }
-    }
-}
-
-// Нога робота
-struct RobotLeg: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            // Нога
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(white: 0.2))
-                .frame(width: 5, height: 8)
-
-            // Ступня
-            RoundedRectangle(cornerRadius: 1)
-                .fill(Color(white: 0.15))
-                .frame(width: 7, height: 3)
+        Group {
+            if mood == .happy || mood == .love || mood == .celebrating || mood == .proud {
+                // Улыбка
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addQuadCurve(to: CGPoint(x: 12, y: 0), control: CGPoint(x: 6, y: 6))
+                }
+                .stroke(mood.eyeColor, lineWidth: 2)
+                .frame(width: 12, height: 6)
+            } else if mood == .sad || mood == .worried {
+                // Грустный рот
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 4))
+                    path.addQuadCurve(to: CGPoint(x: 12, y: 4), control: CGPoint(x: 6, y: 0))
+                }
+                .stroke(mood.eyeColor, lineWidth: 2)
+                .frame(width: 12, height: 6)
+            } else if mood == .surprised {
+                // Удивлённый O
+                Circle()
+                    .stroke(mood.eyeColor, lineWidth: 2)
+                    .frame(width: 8, height: 8)
+            } else if mood == .angry {
+                // Злой рот
+                Rectangle()
+                    .fill(mood.eyeColor)
+                    .frame(width: 10, height: 2)
+            } else {
+                // Нейтральный
+                Rectangle()
+                    .fill(mood.eyeColor.opacity(0.7))
+                    .frame(width: 8, height: 2)
+            }
         }
     }
 }
