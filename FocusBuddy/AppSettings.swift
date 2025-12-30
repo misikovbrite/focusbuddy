@@ -71,6 +71,12 @@ class AppSettings: ObservableObject {
             showOnboarding = true
             saveSettings()
         }
+
+        // Auto-start crafting if none exists
+        if currentCraft == nil {
+            let randomType = CraftItemType.allCases.randomElement() ?? .sock
+            startCrafting(type: randomType)
+        }
     }
 
     // Update sound theme in SoundManager when changed
