@@ -2249,109 +2249,84 @@ struct ExtendedNotchView: View {
     // MARK: - Расширенный контент (минималистичный стиль Dynamic Island)
 
     var expandedContent: some View {
-        VStack(spacing: 12) {
-            // Robot's Room — cozy background with crafting
-            HStack(spacing: 16) {
-                // Left side: Stats
-                VStack(alignment: .leading, spacing: 8) {
-                    // Focus time
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(viewModel.focusStats.formattedFocusedTime)
-                            .font(.system(size: 18, weight: .light, design: .rounded))
-                            .foregroundColor(.white)
-                        Text("focused")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-
-                    // Collection count
-                    HStack(spacing: 4) {
-                        Text("🧦")
-                            .font(.system(size: 10))
-                        Text("\(settings.collectedItems.count)")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-
-                Spacer()
-
-                // Center: Robot (moved via offset in parent)
-                Spacer()
-                    .frame(width: 70, height: 55)
-
-                Spacer()
-
-                // Right side: Crafting progress
-                VStack(alignment: .trailing, spacing: 8) {
-                    if let craft = settings.currentCraft {
-                        // Current crafting item
-                        VStack(alignment: .trailing, spacing: 2) {
-                            HStack(spacing: 4) {
-                                Text(craft.type.emoji)
-                                    .font(.system(size: 12))
-                                Text("\(Int(craft.progress * 100))%")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(Color(hex: craft.color) ?? .cyan)
-                            }
-                            Text("crafting...")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.white.opacity(0.4))
-                        }
-
-                        // Mini progress bar
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.white.opacity(0.1))
-                                    .frame(height: 4)
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color(hex: craft.color) ?? .cyan)
-                                    .frame(width: geo.size.width * craft.progress, height: 4)
-                            }
-                        }
-                        .frame(width: 50, height: 4)
-                    } else {
-                        // No craft — show distractions
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("\(viewModel.focusStats.distractionCount)")
-                                .font(.system(size: 18, weight: .light, design: .rounded))
-                                .foregroundColor(.white)
-                            Text("distractions")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.white.opacity(0.4))
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-
-            // Кнопки — минималистичные
-            HStack(spacing: 12) {
-                MinimalButton(icon: settings.isPaused ? "play.fill" : "pause.fill") {
+        VStack(spacing: 4) {
+            // Компактные кнопки сверху
+            HStack(spacing: 8) {
+                TinyButton(icon: settings.isPaused ? "play.fill" : "pause.fill") {
                     onTogglePause?()
                     collapsePanel()
                 }
 
                 if settings.pomodoroState == .idle {
-                    MinimalButton(icon: "timer") {
+                    TinyButton(icon: "timer") {
                         onStartPomodoro?()
                         collapsePanel()
                     }
                 } else {
-                    MinimalButton(icon: "stop.fill") {
-                        onStopPomodoro?()
-                        collapsePanel()
+                    // Таймер с временем
+                    HStack(spacing: 4) {
+                        Text(settings.pomodoroTimeFormatted)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(settings.pomodoroState == .onBreak ? .cyan : .green)
+
+                        TinyButton(icon: "stop.fill") {
+                            onStopPomodoro?()
+                            collapsePanel()
+                        }
                     }
                 }
 
-                MinimalButton(icon: "gearshape") {
+                Spacer()
+
+                // Мини-статистика
+                HStack(spacing: 6) {
+                    Text("🧦\(settings.collectedItems.count)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.6))
+
+                    Text(viewModel.focusStats.formattedFocusedTime)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+
+                TinyButton(icon: "gearshape") {
                     onOpenSettings?()
                     collapsePanel()
                 }
             }
-            .padding(.bottom, 12)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+
+            // Изометрическая комнатка с роботом
+            IsometricRoom(
+                mood: viewModel.attentionState.mood,
+                eyeOffset: effectiveEyeOffset,
+                isBlinking: isBlinking,
+                antennaGlow: antennaGlow,
+                accessory: settings.robotAccessory,
+                craftingItem: settings.currentCraft,
+                collectedItems: settings.collectedItems
+            )
+            .frame(height: 80)
+            .padding(.bottom, 4)
+        }
+    }
+
+    // Маленькая кнопка для верхней панели
+    struct TinyButton: View {
+        let icon: String
+        let action: () -> Void
+
+        var body: some View {
+            Button(action: action) {
+                Image(systemName: icon)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .frame(width: 20, height: 20)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -3249,6 +3224,274 @@ struct NotchShapeLeft: Shape {
 
         path.closeSubpath()
         return path
+    }
+}
+
+// MARK: - Изометрическая комнатка робота
+
+struct IsometricRoom: View {
+    let mood: RobotMood
+    let eyeOffset: CGSize
+    let isBlinking: Bool
+    let antennaGlow: Bool
+    let accessory: RobotAccessory
+    let craftingItem: CraftingItem?
+    let collectedItems: [CollectedItem]
+
+    var body: some View {
+        ZStack {
+            // Пол комнаты (изометрический ромб)
+            IsometricFloor()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(white: 0.15), Color(white: 0.12)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 120, height: 60)
+
+            // Левая стена
+            IsometricWallLeft()
+                .fill(Color(white: 0.18))
+                .frame(width: 60, height: 50)
+                .offset(x: -30, y: -25)
+
+            // Правая стена
+            IsometricWallRight()
+                .fill(Color(white: 0.14))
+                .frame(width: 60, height: 50)
+                .offset(x: 30, y: -25)
+
+            // Полочка на стене с собранными предметами
+            if !collectedItems.isEmpty {
+                HStack(spacing: 2) {
+                    ForEach(collectedItems.suffix(3)) { item in
+                        Text(item.type.emoji)
+                            .font(.system(size: 8))
+                    }
+                }
+                .offset(x: -25, y: -35)
+            }
+
+            // Окошко на правой стене
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.cyan.opacity(0.2))
+                .frame(width: 15, height: 12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                )
+                .offset(x: 35, y: -35)
+
+            // Робот с телом в центре комнаты
+            FullRobot(
+                mood: mood,
+                eyeOffset: eyeOffset,
+                isBlinking: isBlinking,
+                antennaGlow: antennaGlow,
+                accessory: accessory,
+                isCrafting: craftingItem != nil
+            )
+            .offset(y: -5)
+
+            // Крафтящийся предмет рядом с роботом
+            if let craft = craftingItem {
+                VStack(spacing: 2) {
+                    Text(craft.type.emoji)
+                        .font(.system(size: 10))
+                        .opacity(0.3 + craft.progress * 0.7)
+                    // Маленький прогресс-бар
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 16, height: 2)
+                        .overlay(
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color(hex: craft.color) ?? .cyan)
+                                    .frame(width: geo.size.width * craft.progress)
+                            }
+                        )
+                }
+                .offset(x: 25, y: 8)
+            }
+        }
+    }
+}
+
+// Изометрический пол (ромб)
+struct IsometricFloor: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+
+        path.move(to: CGPoint(x: w / 2, y: 0))          // верх
+        path.addLine(to: CGPoint(x: w, y: h / 2))       // право
+        path.addLine(to: CGPoint(x: w / 2, y: h))       // низ
+        path.addLine(to: CGPoint(x: 0, y: h / 2))       // лево
+        path.closeSubpath()
+
+        return path
+    }
+}
+
+// Левая стена (параллелограмм)
+struct IsometricWallLeft: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+
+        path.move(to: CGPoint(x: 0, y: h / 2))          // низ-лево
+        path.addLine(to: CGPoint(x: 0, y: 0))           // верх-лево
+        path.addLine(to: CGPoint(x: w, y: -h / 4))      // верх-право
+        path.addLine(to: CGPoint(x: w, y: h / 4))       // низ-право
+        path.closeSubpath()
+
+        return path
+    }
+}
+
+// Правая стена (параллелограмм)
+struct IsometricWallRight: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+
+        path.move(to: CGPoint(x: w, y: h / 2))          // низ-право
+        path.addLine(to: CGPoint(x: w, y: 0))           // верх-право
+        path.addLine(to: CGPoint(x: 0, y: -h / 4))      // верх-лево
+        path.addLine(to: CGPoint(x: 0, y: h / 4))       // низ-лево
+        path.closeSubpath()
+
+        return path
+    }
+}
+
+// MARK: - Полный робот с телом
+
+struct FullRobot: View {
+    let mood: RobotMood
+    let eyeOffset: CGSize
+    let isBlinking: Bool
+    let antennaGlow: Bool
+    let accessory: RobotAccessory
+    var isCrafting: Bool = false
+
+    @State private var breathe: CGFloat = 0
+    @State private var craftingArmAngle: Double = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Голова (используем существующий RobotFace)
+            RobotFace(
+                mood: mood,
+                eyeOffset: eyeOffset,
+                isBlinking: isBlinking,
+                eyeSquint: 1.0,
+                antennaGlow: antennaGlow,
+                headTilt: 0,
+                bounce: 0,
+                accessory: accessory
+            )
+            .scaleEffect(1.8)
+            .offset(y: breathe * 0.5)
+
+            // Шея
+            Rectangle()
+                .fill(Color(white: 0.2))
+                .frame(width: 6, height: 4)
+                .offset(y: -2)
+
+            // Тело (пузатое, минималистичное)
+            ZStack {
+                // Основное тело
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(white: 0.18))
+                    .frame(width: 28, height: 24)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color(white: 0.25), lineWidth: 0.5)
+                    )
+
+                // Кнопка/индикатор на груди
+                Circle()
+                    .fill(mood.eyeColor.opacity(0.7))
+                    .frame(width: 5, height: 5)
+                    .shadow(color: mood.eyeColor.opacity(0.5), radius: 2)
+                    .offset(y: -4)
+
+                // Руки
+                HStack(spacing: 24) {
+                    // Левая рука
+                    RobotArm(isLeft: true, isWaving: false)
+                        .rotationEffect(.degrees(isCrafting ? craftingArmAngle : 0), anchor: .top)
+
+                    // Правая рука
+                    RobotArm(isLeft: false, isWaving: false)
+                        .rotationEffect(.degrees(isCrafting ? -craftingArmAngle * 0.5 : 0), anchor: .top)
+                }
+            }
+            .offset(y: breathe)
+
+            // Ноги
+            HStack(spacing: 6) {
+                RobotLeg()
+                RobotLeg()
+            }
+            .offset(y: breathe * 0.3)
+        }
+        .onAppear {
+            // Дыхание
+            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                breathe = 1.5
+            }
+            // Анимация крафтинга
+            if isCrafting {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    craftingArmAngle = 15
+                }
+            }
+        }
+    }
+}
+
+// Рука робота
+struct RobotArm: View {
+    let isLeft: Bool
+    var isWaving: Bool = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Плечо
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color(white: 0.2))
+                .frame(width: 4, height: 10)
+
+            // Кисть
+            Circle()
+                .fill(Color(white: 0.22))
+                .frame(width: 5, height: 5)
+        }
+    }
+}
+
+// Нога робота
+struct RobotLeg: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Нога
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color(white: 0.2))
+                .frame(width: 5, height: 8)
+
+            // Ступня
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color(white: 0.15))
+                .frame(width: 7, height: 3)
+        }
     }
 }
 
