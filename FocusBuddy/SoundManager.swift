@@ -7,8 +7,31 @@ class SoundManager {
     private var audioEngine: AVAudioEngine?
     private var tonePlayer: AVAudioPlayerNode?
 
+    // Sound theme (will be set by AppSettings)
+    var theme: SoundTheme = .minimal
+
     private init() {
         setupAudioEngine()
+    }
+
+    // Theme-specific volume multiplier
+    private var themeVolume: Float {
+        switch theme {
+        case .minimal: return 0.6
+        case .nature: return 0.8
+        case .lofi: return 0.7
+        case .silent: return 0.0
+        }
+    }
+
+    // Theme-specific frequency shift
+    private var themeFrequencyMultiplier: Double {
+        switch theme {
+        case .minimal: return 1.0
+        case .nature: return 0.9  // Lower, more natural
+        case .lofi: return 0.85   // Even lower, warmer
+        case .silent: return 1.0
+        }
     }
 
     private func setupAudioEngine() {
@@ -69,14 +92,21 @@ class SoundManager {
 
     /// Plays a sequence of tones with timing
     private func playMelody(_ notes: [(frequency: Double, duration: Double, delay: Double)], volume: Float = 0.15) {
+        // Skip if silent theme
+        guard theme != .silent else { return }
+
         guard let engine = audioEngine, engine.isRunning else {
             setupAudioEngine()
             return
         }
 
+        let adjustedVolume = volume * themeVolume
+        let freqMultiplier = themeFrequencyMultiplier
+
         for note in notes {
             DispatchQueue.main.asyncAfter(deadline: .now() + note.delay) { [weak self] in
-                if let buffer = self?.generateCleanTone(frequency: note.frequency, duration: note.duration, volume: volume) {
+                let adjustedFreq = note.frequency * freqMultiplier
+                if let buffer = self?.generateCleanTone(frequency: adjustedFreq, duration: note.duration, volume: adjustedVolume) {
                     self?.tonePlayer?.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
                     self?.tonePlayer?.play()
                 }

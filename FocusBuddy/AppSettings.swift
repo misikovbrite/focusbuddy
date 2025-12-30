@@ -39,9 +39,31 @@ class AppSettings: ObservableObject {
     @Published var pomodoroStats: PomodoroStatistics = PomodoroStatistics()
     @Published var dailyStats: [DailyFocusStats] = []
 
+    // Robot's Room & Collection
+    @Published var collectedItems: [CollectedItem] = []
+    @Published var currentCraft: CraftingItem? = nil
+    @Published var roomDecorations: [String: String] = [:]  // position -> itemId
+
+    // Robot Customization
+    @Published var robotEyeColor: RobotEyeColor = .blue
+    @Published var robotAccessory: RobotAccessory = .none
+
+    // Sound Theme
+    @Published var soundTheme: SoundTheme = .minimal
+
+    // Blocked Sites (actual blocking during Pomodoro)
+    @Published var blockedSites: [String] = ["youtube.com", "twitter.com", "reddit.com", "facebook.com", "instagram.com", "tiktok.com"]
+    @Published var siteBlockingEnabled: Bool = false
+
+    // Celebration trigger
+    @Published var showPomodoroConfetti: Bool = false
+
     init() {
         loadSettings()
         requestNotificationPermission()
+
+        // Sync sound theme with SoundManager
+        SoundManager.shared.theme = soundTheme
 
         // First launch detection
         if firstLaunchDate == nil {
@@ -49,6 +71,13 @@ class AppSettings: ObservableObject {
             showOnboarding = true
             saveSettings()
         }
+    }
+
+    // Update sound theme in SoundManager when changed
+    func updateSoundTheme(_ theme: SoundTheme) {
+        soundTheme = theme
+        SoundManager.shared.theme = theme
+        saveSettings()
     }
 
     func completeOnboarding() {
@@ -73,6 +102,12 @@ class AppSettings: ObservableObject {
         pomodoroState = .working
         pomodoroTimeRemaining = TimeInterval(pomodoroWorkMinutes * 60)
         startPomodoroTimer()
+
+        // Start crafting if not already crafting
+        if currentCraft == nil {
+            let randomType = CraftItemType.allCases.randomElement() ?? .sock
+            startCrafting(type: randomType)
+        }
     }
 
     func startBreak() {
@@ -108,6 +143,13 @@ class AppSettings: ObservableObject {
         if pomodoroState == .working {
             // Record completed pomodoro
             recordCompletedPomodoro()
+
+            // Trigger celebration confetti
+            showPomodoroConfetti = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                self.showPomodoroConfetti = false
+            }
+
             startBreak()
         } else if pomodoroState == .onBreak {
             // Record break time
@@ -185,6 +227,10 @@ class AppSettings: ObservableObject {
         }
 
         totalSessionsCompleted += 1
+
+        // Update crafting progress
+        updateCraftProgress()
+
         saveSettings()
     }
 
@@ -236,6 +282,79 @@ class AppSettings: ObservableObject {
             }
             return false
         }.sorted { $0.dateString < $1.dateString }
+    }
+
+    // MARK: - Crafting System
+
+    func startCrafting(type: CraftItemType) {
+        let colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8", "#F7DC6F"]
+        let randomColor = colors.randomElement() ?? "#4ECDC4"
+
+        currentCraft = CraftingItem(
+            type: type,
+            color: randomColor,
+            progress: 0,
+            pomodorosSpent: 0,
+            startDate: Date()
+        )
+        saveSettings()
+    }
+
+    func updateCraftProgress() {
+        guard var craft = currentCraft else { return }
+
+        craft.pomodorosSpent += 1
+        craft.progress = min(1.0, Double(craft.pomodorosSpent) / Double(craft.type.craftTime))
+
+        if craft.isComplete {
+            // Item completed!
+            let newItem = CollectedItem(
+                type: craft.type,
+                color: craft.color,
+                completedDate: Date(),
+                pomodoroCount: craft.pomodorosSpent
+            )
+            collectedItems.append(newItem)
+            currentCraft = nil
+
+            // Auto-start new craft
+            let nextType = CraftItemType.allCases.randomElement() ?? .sock
+            startCrafting(type: nextType)
+        } else {
+            currentCraft = craft
+        }
+        saveSettings()
+    }
+
+    func cancelCraft() {
+        currentCraft = nil
+        saveSettings()
+    }
+
+    var craftProgressPercent: Int {
+        guard let craft = currentCraft else { return 0 }
+        return Int(craft.progress * 100)
+    }
+
+    // MARK: - Blocked Sites
+
+    func addToBlockedSites(_ site: String) {
+        let cleaned = site.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleaned.isEmpty && !blockedSites.contains(cleaned) {
+            blockedSites.append(cleaned)
+            saveSettings()
+        }
+    }
+
+    func removeFromBlockedSites(_ site: String) {
+        blockedSites.removeAll { $0 == site }
+        saveSettings()
+    }
+
+    func isBlocked(_ site: String) -> Bool {
+        guard siteBlockingEnabled && pomodoroState == .working else { return false }
+        let lower = site.lowercased()
+        return blockedSites.contains { lower.contains($0) }
     }
 
     // MARK: - Whitelist
@@ -368,6 +487,27 @@ class AppSettings: ObservableObject {
         if let dailyData = try? JSONEncoder().encode(dailyStats) {
             UserDefaults.standard.set(dailyData, forKey: "dailyStats")
         }
+
+        // Save Collection
+        if let collectionData = try? JSONEncoder().encode(collectedItems) {
+            UserDefaults.standard.set(collectionData, forKey: "collectedItems")
+        }
+
+        // Save Current Craft
+        if let craft = currentCraft, let craftData = try? JSONEncoder().encode(craft) {
+            UserDefaults.standard.set(craftData, forKey: "currentCraft")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "currentCraft")
+        }
+
+        // Save Customization
+        UserDefaults.standard.set(robotEyeColor.rawValue, forKey: "robotEyeColor")
+        UserDefaults.standard.set(robotAccessory.rawValue, forKey: "robotAccessory")
+        UserDefaults.standard.set(soundTheme.rawValue, forKey: "soundTheme")
+
+        // Save Blocked Sites
+        UserDefaults.standard.set(blockedSites, forKey: "blockedSites")
+        UserDefaults.standard.set(siteBlockingEnabled, forKey: "siteBlockingEnabled")
     }
 
     private func loadSettings() {
@@ -403,6 +543,41 @@ class AppSettings: ObservableObject {
            let daily = try? JSONDecoder().decode([DailyFocusStats].self, from: dailyData) {
             dailyStats = daily
         }
+
+        // Load Collection
+        if let collectionData = UserDefaults.standard.data(forKey: "collectedItems"),
+           let items = try? JSONDecoder().decode([CollectedItem].self, from: collectionData) {
+            collectedItems = items
+        }
+
+        // Load Current Craft
+        if let craftData = UserDefaults.standard.data(forKey: "currentCraft"),
+           let craft = try? JSONDecoder().decode(CraftingItem.self, from: craftData) {
+            currentCraft = craft
+        }
+
+        // Load Robot Customization
+        if let eyeColorRaw = UserDefaults.standard.string(forKey: "robotEyeColor"),
+           let eyeColor = RobotEyeColor(rawValue: eyeColorRaw) {
+            robotEyeColor = eyeColor
+        }
+
+        if let accessoryRaw = UserDefaults.standard.string(forKey: "robotAccessory"),
+           let accessory = RobotAccessory(rawValue: accessoryRaw) {
+            robotAccessory = accessory
+        }
+
+        // Load Sound Theme
+        if let themeRaw = UserDefaults.standard.string(forKey: "soundTheme"),
+           let theme = SoundTheme(rawValue: themeRaw) {
+            soundTheme = theme
+        }
+
+        // Load Blocked Sites
+        if let sites = UserDefaults.standard.stringArray(forKey: "blockedSites") {
+            blockedSites = sites
+        }
+        siteBlockingEnabled = UserDefaults.standard.bool(forKey: "siteBlockingEnabled")
     }
 }
 
@@ -573,5 +748,208 @@ struct DailyFocusStats: Codable, Identifiable {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date())
+    }
+}
+
+// MARK: - Collected Items (Robot's Room)
+
+struct CollectedItem: Codable, Identifiable {
+    var id: String = UUID().uuidString
+    let type: CraftItemType
+    let color: String  // Hex color
+    let completedDate: Date
+    let pomodoroCount: Int  // How many pomodoros it took
+    var isDisplayed: Bool = false
+    var displayPosition: String? = nil  // "shelf1", "wall", etc.
+
+    var rarity: ItemRarity {
+        if pomodoroCount >= 4 { return .legendary }
+        if pomodoroCount >= 3 { return .rare }
+        if pomodoroCount >= 2 { return .uncommon }
+        return .common
+    }
+}
+
+enum CraftItemType: String, Codable, CaseIterable {
+    case sock = "sock"
+    case scarf = "scarf"
+    case hat = "hat"
+    case mittens = "mittens"
+    case blanket = "blanket"
+    case plant = "plant"
+
+    var emoji: String {
+        switch self {
+        case .sock: return "🧦"
+        case .scarf: return "🧣"
+        case .hat: return "🎩"
+        case .mittens: return "🧤"
+        case .blanket: return "🛏️"
+        case .plant: return "🪴"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .sock: return "Sock"
+        case .scarf: return "Scarf"
+        case .hat: return "Hat"
+        case .mittens: return "Mittens"
+        case .blanket: return "Blanket"
+        case .plant: return "Plant"
+        }
+    }
+
+    var craftTime: Int {  // Pomodoros needed
+        switch self {
+        case .sock: return 1
+        case .scarf: return 2
+        case .hat: return 2
+        case .mittens: return 1
+        case .blanket: return 4
+        case .plant: return 3
+        }
+    }
+}
+
+enum ItemRarity: String, Codable {
+    case common
+    case uncommon
+    case rare
+    case legendary
+
+    var color: Color {
+        switch self {
+        case .common: return .gray
+        case .uncommon: return .green
+        case .rare: return .blue
+        case .legendary: return .orange
+        }
+    }
+
+    var glowIntensity: Double {
+        switch self {
+        case .common: return 0
+        case .uncommon: return 0.3
+        case .rare: return 0.5
+        case .legendary: return 0.8
+        }
+    }
+}
+
+struct CraftingItem: Codable {
+    let type: CraftItemType
+    let color: String
+    var progress: Double = 0  // 0.0 - 1.0
+    var pomodorosSpent: Int = 0
+    let startDate: Date
+
+    var isComplete: Bool {
+        progress >= 1.0
+    }
+}
+
+// MARK: - Robot Customization
+
+enum RobotEyeColor: String, Codable, CaseIterable {
+    case blue
+    case green
+    case purple
+    case orange
+    case pink
+    case cyan
+
+    var color: Color {
+        switch self {
+        case .blue: return .blue
+        case .green: return .green
+        case .purple: return .purple
+        case .orange: return .orange
+        case .pink: return .pink
+        case .cyan: return .cyan
+        }
+    }
+
+    var displayName: String {
+        rawValue.capitalized
+    }
+}
+
+enum RobotAccessory: String, Codable, CaseIterable {
+    case none
+    case glasses
+    case topHat
+    case bow
+    case crown
+    case flower
+    case headphones
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .glasses: return "Glasses"
+        case .topHat: return "Top Hat"
+        case .bow: return "Bow"
+        case .crown: return "Crown"
+        case .flower: return "Flower"
+        case .headphones: return "Headphones"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .none: return "❌"
+        case .glasses: return "👓"
+        case .topHat: return "🎩"
+        case .bow: return "🎀"
+        case .crown: return "👑"
+        case .flower: return "🌸"
+        case .headphones: return "🎧"
+        }
+    }
+}
+
+// MARK: - Sound Themes
+
+enum SoundTheme: String, Codable, CaseIterable {
+    case minimal
+    case nature
+    case lofi
+    case silent
+
+    var displayName: String {
+        switch self {
+        case .minimal: return "Minimal"
+        case .nature: return "Nature"
+        case .lofi: return "Lo-Fi"
+        case .silent: return "Silent"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .minimal: return "🔔"
+        case .nature: return "🌿"
+        case .lofi: return "🎵"
+        case .silent: return "🔇"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .minimal: return "Clean, simple tones"
+        case .nature: return "Soft, organic sounds"
+        case .lofi: return "Warm, mellow vibes"
+        case .silent: return "No sounds"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .minimal: return "circle"
+        case .nature: return "leaf.fill"
+        case .lofi: return "music.note"
+        case .silent: return "speaker.slash.fill"
+        }
     }
 }

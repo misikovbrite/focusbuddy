@@ -205,6 +205,7 @@ struct SettingsView: View {
     enum SettingsTab: String, CaseIterable {
         case general = "General"
         case pomodoro = "Pomodoro"
+        case customize = "Customize"
         case statistics = "Statistics"
         case whitelist = "Whitelist"
         case debug = "Debug"
@@ -213,6 +214,7 @@ struct SettingsView: View {
             switch self {
             case .general: return "slider.horizontal.3"
             case .pomodoro: return "timer"
+            case .customize: return "paintbrush.fill"
             case .statistics: return "chart.bar"
             case .whitelist: return "checkmark.shield"
             case .debug: return "ant"
@@ -239,6 +241,8 @@ struct SettingsView: View {
                         generalContent
                     case .pomodoro:
                         pomodoroContent
+                    case .customize:
+                        customizeContent
                     case .statistics:
                         statisticsContent
                     case .whitelist:
@@ -614,6 +618,36 @@ struct SettingsView: View {
                 }
             }
 
+            // Sound Theme
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Sound Theme", systemImage: "speaker.wave.2")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 8) {
+                        ForEach(SoundTheme.allCases, id: \.self) { theme in
+                            Button {
+                                settings.updateSoundTheme(theme)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Text(theme.emoji)
+                                        .font(.system(size: 18))
+                                    Text(theme.displayName)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(settings.soundTheme == theme ? .primary : .secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(settings.soundTheme == theme ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.05))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
             // Tips
             SettingsCard {
                 VStack(alignment: .leading, spacing: 8) {
@@ -733,6 +767,232 @@ struct SettingsView: View {
                     Text("Add a site to whitelist above to allow it")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
+                }
+            }
+
+            // Site Blocking Toggle
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle(isOn: $settings.siteBlockingEnabled) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "shield.lefthalf.filled")
+                                .foregroundColor(settings.siteBlockingEnabled ? .red : .secondary)
+                                .font(.system(size: 16))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Site Blocking")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text("Redirect blocked sites during Pomodoro")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: .red))
+
+                    if settings.siteBlockingEnabled {
+                        Divider()
+
+                        Text("Blocked Sites:")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(settings.blockedSites, id: \.self) { site in
+                                HStack(spacing: 4) {
+                                    Text(site)
+                                        .font(.system(size: 10))
+                                    Button {
+                                        settings.removeFromBlockedSites(site)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .foregroundColor(.red.opacity(0.8))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(10)
+                            }
+                        }
+
+                        Text("Sites are redirected to blank page during Pomodoro work sessions")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Customize Content
+
+    var customizeContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionHeader(title: "Customize", subtitle: "Make your robot unique")
+
+            // Robot Preview
+            SettingsCard {
+                HStack {
+                    Spacer()
+                    ZStack {
+                        Circle()
+                            .fill(settings.robotEyeColor.color.opacity(0.15))
+                            .frame(width: 100, height: 100)
+                            .blur(radius: 20)
+
+                        RobotFace(
+                            mood: .happy,
+                            eyeOffset: .zero,
+                            isBlinking: false,
+                            eyeSquint: 0,
+                            antennaGlow: true,
+                            headTilt: 0,
+                            bounce: 0,
+                            accessory: settings.robotAccessory,
+                            customEyeColor: settings.robotEyeColor
+                        )
+                        .scaleEffect(4.0)
+                    }
+                    .frame(height: 100)
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(12)
+            }
+
+            // Eye Color
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Eye Color", systemImage: "eye.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(RobotEyeColor.allCases, id: \.self) { color in
+                            Button {
+                                withAnimation {
+                                    settings.robotEyeColor = color
+                                }
+                            } label: {
+                                VStack(spacing: 6) {
+                                    Circle()
+                                        .fill(color.color)
+                                        .frame(width: 28, height: 28)
+                                        .shadow(color: color.color.opacity(0.5), radius: 4)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white, lineWidth: settings.robotEyeColor == color ? 2 : 0)
+                                        )
+                                    Text(color.displayName)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(settings.robotEyeColor == color ? .primary : .secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            // Accessories
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Accessory", systemImage: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(RobotAccessory.allCases, id: \.self) { accessory in
+                            Button {
+                                withAnimation {
+                                    settings.robotAccessory = accessory
+                                }
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Text(accessory.emoji)
+                                        .font(.system(size: 20))
+                                    Text(accessory.displayName)
+                                        .font(.system(size: 9))
+                                        .foregroundColor(settings.robotAccessory == accessory ? .primary : .secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(settings.robotAccessory == accessory ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.05))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            // Collection
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label("Collection", systemImage: "archivebox.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text("\(settings.collectedItems.count) items")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if settings.collectedItems.isEmpty {
+                        HStack {
+                            Spacer()
+                            VStack(spacing: 8) {
+                                Text("🧦")
+                                    .font(.system(size: 32))
+                                Text("Complete Pomodoros to craft items!")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 20)
+                            Spacer()
+                        }
+                    } else {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 8) {
+                            ForEach(settings.collectedItems.prefix(10)) { item in
+                                VStack(spacing: 2) {
+                                    Text(item.type.emoji)
+                                        .font(.system(size: 18))
+                                    Circle()
+                                        .fill(Color(hex: item.color) ?? .gray)
+                                        .frame(width: 6, height: 6)
+                                }
+                                .padding(6)
+                                .background(item.rarity.color.opacity(0.1))
+                                .cornerRadius(6)
+                            }
+                        }
+
+                        if settings.collectedItems.count > 10 {
+                            Text("+\(settings.collectedItems.count - 10) more")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
         }
@@ -1656,6 +1916,12 @@ struct ExtendedNotchView: View {
     @State private var faceTrackingOffset: CGSize = .zero  // Offset от отслеживания лица
     @State private var wowEffectsTimer: Timer?  // Таймер для WOW эффектов
 
+    // Speech bubbles
+    @State private var speechBubbleText: String? = nil
+    @State private var showSpeechBubble: Bool = false
+    @State private var lastSpeechTime: Date = .distantPast
+    private let speechCooldown: TimeInterval = 30  // Don't spam messages
+
     private let notchBlack = Color(nsColor: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 
     // Onboarding messages
@@ -1832,7 +2098,9 @@ struct ExtendedNotchView: View {
                             eyeSquint: effectiveSquint,
                             antennaGlow: antennaGlow && !isWakingUp,
                             headTilt: effectiveHeadTilt,
-                            bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0)
+                            bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0),
+                            accessory: settings.robotAccessory,
+                            customEyeColor: settings.robotEyeColor
                         )
                     }
                     .scaleEffect((isExpanded ? 2.5 : 1.0) * gestureRecognizedScale)
@@ -1878,7 +2146,20 @@ struct ExtendedNotchView: View {
                     .offset(y: currentHeight + 8)
             }
 
+            // Speech bubble
+            if showSpeechBubble, let text = speechBubbleText, !isExpanded {
+                SpeechBubble(text: text)
+                    .offset(y: currentHeight + 4)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+
             Spacer(minLength: 0)
+
+            // Confetti overlay when Pomodoro completed
+            if settings.showPomodoroConfetti {
+                ConfettiView()
+                    .allowsHitTesting(false)
+            }
         }
         .frame(width: 400, height: 170, alignment: .top)
         .onTapGesture(count: 2) {
@@ -2008,33 +2289,82 @@ struct ExtendedNotchView: View {
     // MARK: - Расширенный контент (минималистичный стиль Dynamic Island)
 
     var expandedContent: some View {
-        VStack(spacing: 16) {
-            // Статистика — фокус, (робот между ними — он перемещается сюда), отвлечения
-            HStack(spacing: 20) {
-                // Время в фокусе
-                VStack(spacing: 2) {
-                    Text(viewModel.focusStats.formattedFocusedTime)
-                        .font(.system(size: 22, weight: .light, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("focused")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
+        VStack(spacing: 12) {
+            // Robot's Room — cozy background with crafting
+            HStack(spacing: 16) {
+                // Left side: Stats
+                VStack(alignment: .leading, spacing: 8) {
+                    // Focus time
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.focusStats.formattedFocusedTime)
+                            .font(.system(size: 18, weight: .light, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("focused")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+
+                    // Collection count
+                    HStack(spacing: 4) {
+                        Text("🧦")
+                            .font(.system(size: 10))
+                        Text("\(settings.collectedItems.count)")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
 
-                // Место для робота (он перемещается сюда из верхней части)
+                Spacer()
+
+                // Center: Robot (moved via offset in parent)
                 Spacer()
                     .frame(width: 70, height: 55)
 
-                // Отвлечения
-                VStack(spacing: 2) {
-                    Text("\(viewModel.focusStats.distractionCount)")
-                        .font(.system(size: 22, weight: .light, design: .rounded))
-                        .foregroundColor(.white)
-                    Text("distractions")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
+                Spacer()
+
+                // Right side: Crafting progress
+                VStack(alignment: .trailing, spacing: 8) {
+                    if let craft = settings.currentCraft {
+                        // Current crafting item
+                        VStack(alignment: .trailing, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Text(craft.type.emoji)
+                                    .font(.system(size: 12))
+                                Text("\(Int(craft.progress * 100))%")
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundColor(Color(hex: craft.color) ?? .cyan)
+                            }
+                            Text("crafting...")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+
+                        // Mini progress bar
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(height: 4)
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color(hex: craft.color) ?? .cyan)
+                                    .frame(width: geo.size.width * craft.progress, height: 4)
+                            }
+                        }
+                        .frame(width: 50, height: 4)
+                    } else {
+                        // No craft — show distractions
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(viewModel.focusStats.distractionCount)")
+                                .font(.system(size: 18, weight: .light, design: .rounded))
+                                .foregroundColor(.white)
+                            Text("distractions")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                    }
                 }
             }
+            .padding(.horizontal, 16)
             .padding(.top, 8)
 
             // Кнопки — минималистичные
@@ -2271,6 +2601,65 @@ struct ExtendedNotchView: View {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.6, blendDuration: 0)) {
             isExpanded = false
         }
+    }
+
+    // MARK: - Speech Bubbles
+
+    private func showSpeech(_ text: String, duration: TimeInterval = 3.0) {
+        // Cooldown check
+        guard Date().timeIntervalSince(lastSpeechTime) > speechCooldown else { return }
+        guard !isExpanded else { return }
+
+        lastSpeechTime = Date()
+        speechBubbleText = text
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            showSpeechBubble = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.showSpeechBubble = false
+            }
+        }
+    }
+
+    private func getRandomFocusComment() -> String {
+        let comments = [
+            "Great focus! 💪",
+            "You're doing amazing!",
+            "Keep it up! 🌟",
+            "Impressive dedication!",
+            "Stay in the zone!",
+            "You're on fire! 🔥",
+            "Excellent work!",
+            "So productive!"
+        ]
+        return comments.randomElement() ?? "Great job!"
+    }
+
+    private func getRandomBreakComment() -> String {
+        let comments = [
+            "Time for a break! ☕",
+            "Rest your eyes 👀",
+            "Stretch a bit!",
+            "You earned this! 🎉",
+            "Relax time~",
+            "Take it easy!"
+        ]
+        return comments.randomElement() ?? "Break time!"
+    }
+
+    private func getRandomDistractionComment() -> String {
+        let comments = [
+            "Hey, focus! 👀",
+            "Come back! 🥺",
+            "Stay with me!",
+            "Where'd you go?",
+            "Focus time!",
+            "Eyes on screen!"
+        ]
+        return comments.randomElement() ?? "Focus!"
     }
 
     private func wink() {
@@ -2740,12 +3129,20 @@ struct ExtendedNotchView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation { headTilt = 0 }
             }
+            // Show speech bubble
+            if Double.random(in: 0...1) < 0.3 {
+                showSpeech(getRandomDistractionComment())
+            }
         case .worried:
             withAnimation(.easeInOut(duration: 0.06).repeatCount(6, autoreverses: true)) {
                 bounce = -1
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 withAnimation { bounce = 0 }
+            }
+            // Show speech bubble
+            if Double.random(in: 0...1) < 0.5 {
+                showSpeech(getRandomDistractionComment())
             }
         case .sad:
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -2906,17 +3303,34 @@ struct RobotFace: View {
     let antennaGlow: Bool
     let headTilt: Double
     let bounce: CGFloat
+    var accessory: RobotAccessory = .none
+    var customEyeColor: RobotEyeColor? = nil
 
     private let notchBlack = Color(nsColor: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
 
+    // Use custom color if set, otherwise use mood color
+    private var effectiveEyeColor: Color {
+        if let custom = customEyeColor {
+            return custom.color
+        }
+        return mood.eyeColor
+    }
+
     var body: some View {
         ZStack {
+            // Accessory behind (flower on head)
+            if accessory == .flower {
+                Text("🌸")
+                    .font(.system(size: 8))
+                    .offset(x: 10, y: -12)
+            }
+
             // Антенна с реакцией на настроение
             VStack(spacing: 0) {
                 Circle()
-                    .fill(mood.eyeColor)
+                    .fill(effectiveEyeColor)
                     .frame(width: 4, height: 4)
-                    .shadow(color: mood.eyeColor.opacity(antennaGlow ? 0.9 : 0.5), radius: antennaGlow ? 4 : 2)
+                    .shadow(color: effectiveEyeColor.opacity(antennaGlow ? 0.9 : 0.5), radius: antennaGlow ? 4 : 2)
 
                 Rectangle()
                     .fill(Color.gray.opacity(0.6))
@@ -2924,6 +3338,25 @@ struct RobotFace: View {
             }
             .offset(y: -11 + CGFloat(mood.antennaPosition) * -2)
             .rotationEffect(.degrees(mood == .angry ? Double.random(in: -5...5) : 0))
+
+            // Top hat accessory (behind head)
+            if accessory == .topHat {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.black)
+                    .frame(width: 14, height: 8)
+                    .offset(y: -14)
+                RoundedRectangle(cornerRadius: 0.5)
+                    .fill(Color.black)
+                    .frame(width: 18, height: 2)
+                    .offset(y: -10)
+            }
+
+            // Crown accessory
+            if accessory == .crown {
+                Text("👑")
+                    .font(.system(size: 10))
+                    .offset(y: -14)
+            }
 
             // Голова робота
             RoundedRectangle(cornerRadius: 5)
@@ -2957,8 +3390,8 @@ struct RobotFace: View {
                     VStack(spacing: 1) {
                         // Брови
                         HStack(spacing: 6) {
-                            RobotBrow(mood: mood, isLeft: true)
-                            RobotBrow(mood: mood, isLeft: false)
+                            RobotBrow(mood: mood, isLeft: true, customColor: customEyeColor?.color)
+                            RobotBrow(mood: mood, isLeft: false, customColor: customEyeColor?.color)
                         }
                         .offset(y: -1)
 
@@ -2967,24 +3400,66 @@ struct RobotFace: View {
                             RobotEye(
                                 mood: mood,
                                 mouseOffset: eyeOffset,
-                                isBlinking: isBlinking || isWinking,  // Левый глаз закрывается при подмигивании
+                                isBlinking: isBlinking || isWinking,
                                 squint: eyeSquint,
-                                isLeft: true
+                                isLeft: true,
+                                customColor: customEyeColor?.color
                             )
                             RobotEye(
                                 mood: mood,
                                 mouseOffset: eyeOffset,
-                                isBlinking: isBlinking,  // Правый глаз остаётся открытым
+                                isBlinking: isBlinking,
                                 squint: eyeSquint,
-                                isLeft: false
+                                isLeft: false,
+                                customColor: customEyeColor?.color
                             )
                         }
 
                         // Рот
-                        RobotMouth(mood: mood)
+                        RobotMouth(mood: mood, customColor: customEyeColor?.color)
                             .offset(y: 0.5)
                     }
                 )
+
+            // Glasses accessory (in front of face)
+            if accessory == .glasses {
+                HStack(spacing: 2) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.gray.opacity(0.8), lineWidth: 1)
+                        .frame(width: 8, height: 5)
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(Color.gray.opacity(0.8), lineWidth: 1)
+                        .frame(width: 8, height: 5)
+                }
+                .offset(y: -1)
+            }
+
+            // Bow accessory
+            if accessory == .bow {
+                Text("🎀")
+                    .font(.system(size: 7))
+                    .offset(x: -10, y: -8)
+            }
+
+            // Headphones accessory
+            if accessory == .headphones {
+                HStack(spacing: 22) {
+                    Circle()
+                        .fill(Color.gray.opacity(0.7))
+                        .frame(width: 5, height: 5)
+                    Circle()
+                        .fill(Color.gray.opacity(0.7))
+                        .frame(width: 5, height: 5)
+                }
+                .offset(y: 0)
+                // Headband
+                Path { path in
+                    path.addArc(center: CGPoint(x: 0, y: 0), radius: 11, startAngle: .degrees(200), endAngle: .degrees(340), clockwise: false)
+                }
+                .stroke(Color.gray.opacity(0.6), lineWidth: 1.5)
+                .frame(width: 22, height: 10)
+                .offset(y: -6)
+            }
 
             // Эффект сердечек при mood == .love
             if mood == .love {
@@ -3007,6 +3482,7 @@ struct RobotFace: View {
 struct RobotBrow: View {
     let mood: RobotMood
     let isLeft: Bool
+    var customColor: Color? = nil
 
     private var rotation: Double {
         let base = mood.browPosition * 15
@@ -3021,9 +3497,13 @@ struct RobotBrow: View {
         return -mood.browPosition * 1.5
     }
 
+    private var effectiveColor: Color {
+        customColor ?? mood.eyeColor
+    }
+
     var body: some View {
         RoundedRectangle(cornerRadius: 0.5)
-            .fill(mood.eyeColor.opacity(0.8))
+            .fill(effectiveColor.opacity(0.8))
             .frame(width: 5, height: 1)
             .rotationEffect(.degrees(rotation))
             .offset(y: offsetY)
@@ -3034,6 +3514,11 @@ struct RobotBrow: View {
 
 struct RobotMouth: View {
     let mood: RobotMood
+    var customColor: Color? = nil
+
+    private var effectiveColor: Color {
+        customColor ?? mood.eyeColor
+    }
 
     var body: some View {
         if mood.mouthOpen > 0.3 {
@@ -3044,12 +3529,12 @@ struct RobotMouth: View {
         } else if mood.mouthShape != 0 {
             // Улыбка или грусть
             MouthCurve(curvature: mood.mouthShape)
-                .stroke(mood.eyeColor.opacity(0.7), lineWidth: 1)
+                .stroke(effectiveColor.opacity(0.7), lineWidth: 1)
                 .frame(width: 6, height: 3)
         } else {
             // Нейтральный рот — просто линия
             Rectangle()
-                .fill(mood.eyeColor.opacity(0.5))
+                .fill(effectiveColor.opacity(0.5))
                 .frame(width: 4, height: 0.5)
         }
     }
@@ -3082,6 +3567,11 @@ struct RobotEye: View {
     let isBlinking: Bool
     var squint: CGFloat = 1.0
     let isLeft: Bool
+    var customColor: Color? = nil
+
+    private var effectiveColor: Color {
+        customColor ?? mood.eyeColor
+    }
 
     private var eyeModifier: Double {
         isLeft ? mood.leftEyeModifier : mood.rightEyeModifier
@@ -3102,9 +3592,9 @@ struct RobotEye: View {
         ZStack {
             // Глаз
             Ellipse()
-                .fill(mood.eyeColor)
+                .fill(effectiveColor)
                 .frame(width: eyeWidth, height: eyeHeight)
-                .shadow(color: mood.eyeColor.opacity(0.8), radius: 2)
+                .shadow(color: effectiveColor.opacity(0.8), radius: 2)
 
             // Зрачок (показываем даже при прищуре, но не при моргании)
             if !isBlinking {
@@ -3135,6 +3625,45 @@ struct RobotEye: View {
         }
         .animation(.easeInOut(duration: 0.1), value: isBlinking)
         .animation(.easeInOut(duration: 0.2), value: mood)
+    }
+}
+
+// MARK: - Speech Bubble
+
+struct SpeechBubble: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.85))
+                )
+        }
+        .overlay(alignment: .top) {
+            // Speech bubble tail
+            Triangle()
+                .fill(Color.black.opacity(0.85))
+                .frame(width: 10, height: 6)
+                .rotationEffect(.degrees(180))
+                .offset(y: -4)
+        }
+    }
+}
+
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -3189,6 +3718,97 @@ struct CelebrationParticles: View {
             }
         }
         .onAppear { animate = true }
+    }
+}
+
+// MARK: - Confetti View (Pomodoro completion)
+
+struct ConfettiView: View {
+    @State private var confettiPieces: [ConfettiPiece] = []
+
+    struct ConfettiPiece: Identifiable {
+        let id = UUID()
+        let color: Color
+        let x: CGFloat
+        var y: CGFloat
+        let rotation: Double
+        let scale: CGFloat
+        let shape: Int // 0 = circle, 1 = rectangle, 2 = star
+    }
+
+    var body: some View {
+        ZStack {
+            ForEach(confettiPieces) { piece in
+                ConfettiShape(shape: piece.shape)
+                    .fill(piece.color)
+                    .frame(width: 6 * piece.scale, height: 6 * piece.scale)
+                    .rotationEffect(.degrees(piece.rotation))
+                    .position(x: piece.x, y: piece.y)
+            }
+        }
+        .onAppear {
+            createConfetti()
+            animateConfetti()
+        }
+    }
+
+    private func createConfetti() {
+        let colors: [Color] = [.yellow, .green, .blue, .pink, .orange, .purple, .cyan, .red]
+
+        for _ in 0..<30 {
+            let piece = ConfettiPiece(
+                color: colors.randomElement() ?? .yellow,
+                x: CGFloat.random(in: 100...300),
+                y: CGFloat.random(in: -50...0),
+                rotation: Double.random(in: 0...360),
+                scale: CGFloat.random(in: 0.5...1.2),
+                shape: Int.random(in: 0...2)
+            )
+            confettiPieces.append(piece)
+        }
+    }
+
+    private func animateConfetti() {
+        withAnimation(.easeIn(duration: 2.5)) {
+            for i in confettiPieces.indices {
+                confettiPieces[i].y = CGFloat.random(in: 180...250)
+            }
+        }
+    }
+}
+
+struct ConfettiShape: Shape {
+    let shape: Int
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch shape {
+        case 0: // Circle
+            path.addEllipse(in: rect)
+        case 1: // Rectangle
+            path.addRect(CGRect(x: rect.midX - rect.width/4, y: 0, width: rect.width/2, height: rect.height))
+        default: // Star
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let points = 5
+            let outerRadius = min(rect.width, rect.height) / 2
+            let innerRadius = outerRadius * 0.4
+
+            for i in 0..<points * 2 {
+                let radius = i.isMultiple(of: 2) ? outerRadius : innerRadius
+                let angle = Double(i) * .pi / Double(points) - .pi / 2
+                let point = CGPoint(
+                    x: center.x + CGFloat(cos(angle)) * radius,
+                    y: center.y + CGFloat(sin(angle)) * radius
+                )
+                if i == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addLine(to: point)
+                }
+            }
+            path.closeSubpath()
+        }
+        return path
     }
 }
 
@@ -3744,5 +4364,24 @@ class MouseTracker: ObservableObject {
     deinit {
         timer?.invalidate()
         behaviorTimer?.invalidate()
+    }
+}
+
+// MARK: - Color Extension for Hex
+
+extension Color {
+    init?(hex: String) {
+        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
+
+        var rgb: UInt64 = 0
+
+        guard Scanner(string: hexSanitized).scanHexInt64(&rgb) else { return nil }
+
+        let r = Double((rgb & 0xFF0000) >> 16) / 255.0
+        let g = Double((rgb & 0x00FF00) >> 8) / 255.0
+        let b = Double(rgb & 0x0000FF) / 255.0
+
+        self.init(red: r, green: g, blue: b)
     }
 }

@@ -542,6 +542,117 @@ enum AppContext {
         }
     }
 
+    // MARK: - Site Blocking
+
+    private static var lastBlockAttempt: Date = .distantPast
+    private static let blockCooldown: TimeInterval = 2.0  // Don't spam blocks
+
+    /// Checks if current site should be blocked and blocks it if needed
+    /// Returns true if site was blocked
+    static func checkAndBlockSite() -> Bool {
+        guard let settings = settings else { return false }
+        guard settings.siteBlockingEnabled else { return false }
+        guard settings.pomodoroState == .working else { return false }
+
+        // Cooldown to prevent spam
+        guard Date().timeIntervalSince(lastBlockAttempt) > blockCooldown else { return false }
+
+        // Get current URL from Safari
+        if let url = getSafariCurrentURL()?.lowercased() {
+            for blockedSite in settings.blockedSites {
+                if url.contains(blockedSite.lowercased()) {
+                    // Block it!
+                    lastBlockAttempt = Date()
+                    redirectSafariToBlockPage()
+                    return true
+                }
+            }
+        }
+
+        // Get current URL from Chrome
+        if let url = getChromeCurrentURL()?.lowercased() {
+            for blockedSite in settings.blockedSites {
+                if url.contains(blockedSite.lowercased()) {
+                    lastBlockAttempt = Date()
+                    redirectChromeToBlockPage()
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private static func getSafariCurrentURL() -> String? {
+        let script = """
+        tell application "Safari"
+            if (count of windows) > 0 then
+                return URL of front document
+            end if
+        end tell
+        return ""
+        """
+
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            let result = appleScript.executeAndReturnError(&error)
+            if error == nil {
+                return result.stringValue
+            }
+        }
+        return nil
+    }
+
+    private static func getChromeCurrentURL() -> String? {
+        let script = """
+        tell application "Google Chrome"
+            if (count of windows) > 0 then
+                return URL of active tab of front window
+            end if
+        end tell
+        return ""
+        """
+
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            let result = appleScript.executeAndReturnError(&error)
+            if error == nil {
+                return result.stringValue
+            }
+        }
+        return nil
+    }
+
+    private static func redirectSafariToBlockPage() {
+        let script = """
+        tell application "Safari"
+            if (count of windows) > 0 then
+                set URL of front document to "about:blank"
+            end if
+        end tell
+        """
+
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+
+    private static func redirectChromeToBlockPage() {
+        let script = """
+        tell application "Google Chrome"
+            if (count of windows) > 0 then
+                set URL of active tab of front window to "about:blank"
+            end if
+        end tell
+        """
+
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+
     var strictness: Double {
         switch self {
         case .working: return 1.0

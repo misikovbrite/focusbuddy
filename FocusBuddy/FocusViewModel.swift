@@ -81,6 +81,9 @@ class FocusViewModel: ObservableObject {
         // Определяем контекст (какое приложение активно)
         currentContext = AppContext.detect()
 
+        // Check site blocking (only during active Pomodoro work)
+        _ = AppContext.checkAndBlockSite()
+
         // Если на перерыве Pomodoro — отвлекающие сайты OK
         if let settings = settings, settings.pomodoroState == .onBreak {
             // На перерыве не ругаемся
