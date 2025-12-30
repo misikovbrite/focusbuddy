@@ -6,9 +6,12 @@ class CameraManager: NSObject, ObservableObject {
     @Published var isFaceDetected = false
     @Published var isAuthorized = false
     @Published var errorMessage: String?
-    @Published var headAngle: Double = 0.0
+    @Published var headAngle: Double = 0.0  // Total angle for distraction detection
+    @Published var headYaw: Double = 0.0    // Left-right rotation
+    @Published var facePositionX: CGFloat = 0.5  // Face X position (0 = left, 1 = right)
     @Published var isWaving = false  // User is waving at the robot!
     @Published var isShowingStop = false  // User shows "stop" palm gesture
+    @Published var isShowingHeart = false  // User shows heart gesture (thumbs up touching)
 
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
@@ -26,6 +29,10 @@ class CameraManager: NSObject, ObservableObject {
     // Stop gesture detection
     private var lastStopDetected: Date = .distantPast
     private let stopDebounce: TimeInterval = 3.0  // Don't detect stop again for 3 seconds
+
+    // Heart gesture detection
+    private var lastHeartDetected: Date = .distantPast
+    private let heartDebounce: TimeInterval = 5.0  // Don't detect heart again for 5 seconds
 
     override init() {
         super.init()
@@ -168,9 +175,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Face detection request
         let faceRequest = VNDetectFaceLandmarksRequest()
 
-        // Hand pose detection request
+        // Hand pose detection request (2 hands for heart gesture)
         let handRequest = VNDetectHumanHandPoseRequest()
-        handRequest.maximumHandCount = 1
+        handRequest.maximumHandCount = 2
 
         do {
             try handler.perform([faceRequest, handRequest])
@@ -178,7 +185,11 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             // Process face
             if let faceObservations = faceRequest.results, !faceObservations.isEmpty,
                let face = faceObservations.first {
-                let (isLooking, angle) = analyzeFace(face: face)
+                let (isLooking, angle, yaw) = analyzeFace(face: face)
+
+                // Get face center X position (0 = left edge, 1 = right edge)
+                // Note: camera is mirrored, so we invert
+                let faceCenterX = 1.0 - (face.boundingBox.midX)
 
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
@@ -187,6 +198,8 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
                     }
                     self.isFaceDetected = isLooking
                     self.headAngle = angle
+                    self.headYaw = yaw
+                    self.facePositionX = faceCenterX  // For eye tracking
                 }
             } else {
                 DispatchQueue.main.async { [weak self] in
@@ -194,11 +207,18 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
                 }
             }
 
-            // Process hand for gesture detection
-            if let handObservations = handRequest.results, !handObservations.isEmpty,
-               let hand = handObservations.first {
-                detectWave(hand: hand)
-                detectStopGesture(hand: hand)
+            // Process hands for gesture detection
+            if let handObservations = handRequest.results, !handObservations.isEmpty {
+                // Single hand gestures
+                if let hand = handObservations.first {
+                    detectWave(hand: hand)
+                    detectStopGesture(hand: hand)
+                }
+
+                // Two-hand gestures (heart shape)
+                if handObservations.count >= 2 {
+                    detectHeartGesture(hands: handObservations)
+                }
             }
 
         } catch {
@@ -335,16 +355,74 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
+    // MARK: - Heart Gesture Detection ❤️
+
+    private func detectHeartGesture(hands: [VNHumanHandPoseObservation]) {
+        // Don't detect if we just detected heart gesture
+        guard Date().timeIntervalSince(lastHeartDetected) > heartDebounce else { return }
+        guard hands.count >= 2 else { return }
+
+        do {
+            let hand1 = hands[0]
+            let hand2 = hands[1]
+
+            // Get thumb tips from both hands
+            let thumb1 = try hand1.recognizedPoint(.thumbTip)
+            let thumb2 = try hand2.recognizedPoint(.thumbTip)
+
+            // Get index finger tips
+            let index1 = try hand1.recognizedPoint(.indexTip)
+            let index2 = try hand2.recognizedPoint(.indexTip)
+
+            // Check confidence
+            guard thumb1.confidence > 0.5 && thumb2.confidence > 0.5 &&
+                  index1.confidence > 0.5 && index2.confidence > 0.5 else { return }
+
+            // Heart gesture: thumbs should be close together (touching or near)
+            let thumbDistance = hypot(thumb1.location.x - thumb2.location.x,
+                                      thumb1.location.y - thumb2.location.y)
+
+            // Index fingers should also be close together
+            let indexDistance = hypot(index1.location.x - index2.location.x,
+                                      index1.location.y - index2.location.y)
+
+            // Thumbs should be lower than index fingers (forming heart top)
+            let thumbsLower = (thumb1.location.y + thumb2.location.y) / 2 <
+                              (index1.location.y + index2.location.y) / 2
+
+            // Check for heart shape: thumbs close, index fingers close, thumbs below
+            let isHeartShape = thumbDistance < 0.15 && indexDistance < 0.20 && thumbsLower
+
+            if isHeartShape {
+                lastHeartDetected = Date()
+
+                DispatchQueue.main.async { [weak self] in
+                    self?.isShowingHeart = true
+
+                    // Reset after animation time
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        self?.isShowingHeart = false
+                    }
+                }
+            }
+
+        } catch {
+            // Hand points not available
+        }
+    }
+
     // MARK: - Face Analysis
 
-    private func analyzeFace(face: VNFaceObservation) -> (Bool, Double) {
+    private func analyzeFace(face: VNFaceObservation) -> (Bool, Double, Double) {
         var totalAngle: Double = 0
+        var yawValue: Double = 0
 
         // Check yaw (left/right rotation)
         if let yaw = face.yaw?.doubleValue {
+            yawValue = yaw  // Store signed yaw for eye tracking
             totalAngle += abs(yaw)
             if abs(yaw) > 0.5 { // ~30 degrees
-                return (false, totalAngle)
+                return (false, totalAngle, yawValue)
             }
         }
 
@@ -352,7 +430,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         if let pitch = face.pitch?.doubleValue {
             totalAngle += abs(pitch)
             if abs(pitch) > 0.5 {
-                return (false, totalAngle)
+                return (false, totalAngle, yawValue)
             }
         }
 
@@ -360,17 +438,17 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         if let roll = face.roll?.doubleValue {
             totalAngle += abs(roll) * 0.5
             if abs(roll) > 0.7 { // ~40 degrees
-                return (false, totalAngle)
+                return (false, totalAngle, yawValue)
             }
         }
 
         // Check eye landmarks
         if let landmarks = face.landmarks {
             if landmarks.leftEye == nil && landmarks.rightEye == nil {
-                return (false, totalAngle)
+                return (false, totalAngle, yawValue)
             }
         }
 
-        return (true, totalAngle)
+        return (true, totalAngle, yawValue)
     }
 }

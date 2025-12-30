@@ -9,6 +9,14 @@ class AppSettings: ObservableObject {
     @Published var sensitivity: Double = 0.4
     @Published var isPaused: Bool = false
 
+    // Strictness mode
+    @Published var strictnessMode: StrictnessMode = .normal
+
+    // Onboarding
+    @Published var hasCompletedOnboarding: Bool = false
+    @Published var showOnboarding: Bool = false
+    @Published var hasSeenWakeUpAnimation: Bool = false
+
     // Pomodoro
     @Published var pomodoroEnabled: Bool = false
     @Published var pomodoroWorkMinutes: Int = 25
@@ -24,10 +32,39 @@ class AppSettings: ObservableObject {
     @Published var ignoreCount: Int = 0
     @Published var totalFocusStreak: Int = 0
     @Published var lastSessionDate: Date?
+    @Published var totalSessionsCompleted: Int = 0
+    @Published var firstLaunchDate: Date?
+
+    // Pomodoro Statistics
+    @Published var pomodoroStats: PomodoroStatistics = PomodoroStatistics()
+    @Published var dailyStats: [DailyFocusStats] = []
 
     init() {
         loadSettings()
         requestNotificationPermission()
+
+        // First launch detection
+        if firstLaunchDate == nil {
+            firstLaunchDate = Date()
+            showOnboarding = true
+            saveSettings()
+        }
+    }
+
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        showOnboarding = false
+        saveSettings()
+    }
+
+    func markWakeUpAnimationSeen() {
+        hasSeenWakeUpAnimation = true
+        saveSettings()
+    }
+
+    func incrementSessionsCompleted() {
+        totalSessionsCompleted += 1
+        saveSettings()
     }
 
     // MARK: - Pomodoro
@@ -69,8 +106,14 @@ class AppSettings: ObservableObject {
         pomodoroTimer?.invalidate()
 
         if pomodoroState == .working {
+            // Record completed pomodoro
+            recordCompletedPomodoro()
             startBreak()
         } else if pomodoroState == .onBreak {
+            // Record break time
+            pomodoroStats.totalBreakMinutes += pomodoroBreakMinutes
+            saveSettings()
+
             pomodoroState = .working
             pomodoroTimeRemaining = TimeInterval(pomodoroWorkMinutes * 60)
             startPomodoroTimer()
@@ -82,6 +125,117 @@ class AppSettings: ObservableObject {
         let minutes = Int(pomodoroTimeRemaining) / 60
         let seconds = Int(pomodoroTimeRemaining) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    // MARK: - Statistics Recording
+
+    func recordCompletedPomodoro() {
+        // Update total stats
+        pomodoroStats.totalPomodorosCompleted += 1
+        pomodoroStats.totalWorkMinutes += pomodoroWorkMinutes
+
+        // Update streak
+        let today = Calendar.current.startOfDay(for: Date())
+        if let lastDate = pomodoroStats.lastPomodoroDate {
+            let lastDay = Calendar.current.startOfDay(for: lastDate)
+            let daysDiff = Calendar.current.dateComponents([.day], from: lastDay, to: today).day ?? 0
+
+            if daysDiff == 0 {
+                // Same day — continue streak
+            } else if daysDiff == 1 {
+                // Next day — increment streak
+                pomodoroStats.currentStreak += 1
+            } else {
+                // Missed days — reset streak
+                pomodoroStats.currentStreak = 1
+            }
+        } else {
+            pomodoroStats.currentStreak = 1
+        }
+
+        // Update longest streak
+        if pomodoroStats.currentStreak > pomodoroStats.longestStreak {
+            pomodoroStats.longestStreak = pomodoroStats.currentStreak
+        }
+
+        pomodoroStats.lastPomodoroDate = Date()
+
+        // Weekly stats
+        let weekStart = Calendar.current.date(from: Calendar.current.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date()))
+        if let currentWeekStart = weekStart {
+            if pomodoroStats.weekStartDate != currentWeekStart {
+                // New week — reset weekly counter
+                pomodoroStats.weekStartDate = currentWeekStart
+                pomodoroStats.weeklyPomodorosCompleted = 1
+            } else {
+                pomodoroStats.weeklyPomodorosCompleted += 1
+            }
+        }
+
+        // Daily stats
+        updateDailyStats()
+
+        // Check for best day
+        let todayKey = DailyFocusStats.todayKey()
+        if let todayStats = dailyStats.first(where: { $0.dateString == todayKey }) {
+            if todayStats.pomodorosCompleted > pomodoroStats.bestDayPomodorosCount {
+                pomodoroStats.bestDayPomodorosCount = todayStats.pomodorosCompleted
+                pomodoroStats.bestDayDate = Date()
+            }
+        }
+
+        totalSessionsCompleted += 1
+        saveSettings()
+    }
+
+    private func updateDailyStats() {
+        let todayKey = DailyFocusStats.todayKey()
+
+        if let index = dailyStats.firstIndex(where: { $0.dateString == todayKey }) {
+            dailyStats[index].pomodorosCompleted += 1
+            dailyStats[index].focusMinutes += pomodoroWorkMinutes
+        } else {
+            var newDay = DailyFocusStats(dateString: todayKey)
+            newDay.pomodorosCompleted = 1
+            newDay.focusMinutes = pomodoroWorkMinutes
+            dailyStats.append(newDay)
+        }
+
+        // Keep only last 30 days
+        if dailyStats.count > 30 {
+            dailyStats = Array(dailyStats.suffix(30))
+        }
+    }
+
+    func recordDistraction() {
+        let todayKey = DailyFocusStats.todayKey()
+
+        if let index = dailyStats.firstIndex(where: { $0.dateString == todayKey }) {
+            dailyStats[index].distractionCount += 1
+        } else {
+            var newDay = DailyFocusStats(dateString: todayKey)
+            newDay.distractionCount = 1
+            dailyStats.append(newDay)
+        }
+        saveSettings()
+    }
+
+    func getTodayStats() -> DailyFocusStats? {
+        let todayKey = DailyFocusStats.todayKey()
+        return dailyStats.first(where: { $0.dateString == todayKey })
+    }
+
+    func getWeekStats() -> [DailyFocusStats] {
+        let calendar = Calendar.current
+        let today = Date()
+        let weekAgo = calendar.date(byAdding: .day, value: -7, to: today) ?? today
+
+        return dailyStats.filter { stat in
+            if let date = stat.date {
+                return date >= weekAgo
+            }
+            return false
+        }.sorted { $0.dateString < $1.dateString }
     }
 
     // MARK: - Whitelist
@@ -148,6 +302,47 @@ class AppSettings: ObservableObject {
         sendNotification(title: message.0, body: message.1)
     }
 
+    // MARK: - Robot personality comments
+
+    func getGreeting() -> String? {
+        let hour = Calendar.current.component(.hour, from: Date())
+
+        // Check if first session today
+        if let lastDate = lastSessionDate {
+            let isNewDay = !Calendar.current.isDateInToday(lastDate)
+            if isNewDay {
+                if hour < 7 {
+                    return "Wow, you're up early! Let's be productive."
+                } else if hour < 10 {
+                    return "Good morning! Ready to focus?"
+                } else if hour > 22 {
+                    return "Working late? I'll keep you company."
+                }
+            }
+        }
+
+        // Check days since first launch
+        if let firstDate = firstLaunchDate {
+            let daysSinceFirst = Calendar.current.dateComponents([.day], from: firstDate, to: Date()).day ?? 0
+            if daysSinceFirst == 7 {
+                return "One week together! Great progress."
+            } else if daysSinceFirst == 30 {
+                return "A whole month! You're amazing."
+            }
+        }
+
+        // Sessions milestones
+        if totalSessionsCompleted == 10 {
+            return "10 sessions done! Keep it up!"
+        } else if totalSessionsCompleted == 50 {
+            return "50 sessions! You're a focus master."
+        } else if totalSessionsCompleted == 100 {
+            return "100 sessions! Incredible dedication!"
+        }
+
+        return nil
+    }
+
     // MARK: - Save/Load
 
     private func saveSettings() {
@@ -158,6 +353,21 @@ class AppSettings: ObservableObject {
         UserDefaults.standard.set(pomodoroEnabled, forKey: "pomodoroEnabled")
         UserDefaults.standard.set(pomodoroWorkMinutes, forKey: "pomodoroWorkMinutes")
         UserDefaults.standard.set(pomodoroBreakMinutes, forKey: "pomodoroBreakMinutes")
+        UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
+        UserDefaults.standard.set(hasSeenWakeUpAnimation, forKey: "hasSeenWakeUpAnimation")
+        UserDefaults.standard.set(strictnessMode.rawValue, forKey: "strictnessMode")
+        UserDefaults.standard.set(totalSessionsCompleted, forKey: "totalSessionsCompleted")
+        UserDefaults.standard.set(firstLaunchDate, forKey: "firstLaunchDate")
+
+        // Save Pomodoro Statistics
+        if let statsData = try? JSONEncoder().encode(pomodoroStats) {
+            UserDefaults.standard.set(statsData, forKey: "pomodoroStats")
+        }
+
+        // Save Daily Stats
+        if let dailyData = try? JSONEncoder().encode(dailyStats) {
+            UserDefaults.standard.set(dailyData, forKey: "dailyStats")
+        }
     }
 
     private func loadSettings() {
@@ -166,12 +376,33 @@ class AppSettings: ObservableObject {
         totalFocusStreak = UserDefaults.standard.integer(forKey: "totalFocusStreak")
         lastSessionDate = UserDefaults.standard.object(forKey: "lastSessionDate") as? Date
         pomodoroEnabled = UserDefaults.standard.bool(forKey: "pomodoroEnabled")
+        hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        hasSeenWakeUpAnimation = UserDefaults.standard.bool(forKey: "hasSeenWakeUpAnimation")
+        totalSessionsCompleted = UserDefaults.standard.integer(forKey: "totalSessionsCompleted")
+        firstLaunchDate = UserDefaults.standard.object(forKey: "firstLaunchDate") as? Date
+
+        if let modeRaw = UserDefaults.standard.string(forKey: "strictnessMode"),
+           let mode = StrictnessMode(rawValue: modeRaw) {
+            strictnessMode = mode
+        }
 
         let workMin = UserDefaults.standard.integer(forKey: "pomodoroWorkMinutes")
         if workMin > 0 { pomodoroWorkMinutes = workMin }
 
         let breakMin = UserDefaults.standard.integer(forKey: "pomodoroBreakMinutes")
         if breakMin > 0 { pomodoroBreakMinutes = breakMin }
+
+        // Load Pomodoro Statistics
+        if let statsData = UserDefaults.standard.data(forKey: "pomodoroStats"),
+           let stats = try? JSONDecoder().decode(PomodoroStatistics.self, from: statsData) {
+            pomodoroStats = stats
+        }
+
+        // Load Daily Stats
+        if let dailyData = UserDefaults.standard.data(forKey: "dailyStats"),
+           let daily = try? JSONDecoder().decode([DailyFocusStats].self, from: dailyData) {
+            dailyStats = daily
+        }
     }
 }
 
@@ -233,5 +464,114 @@ enum TimeOfDay {
         case .evening: return "Good evening!"
         case .night: return "It's getting late..."
         }
+    }
+}
+
+// MARK: - Strictness Mode
+
+enum StrictnessMode: String, CaseIterable {
+    case chill = "chill"
+    case normal = "normal"
+    case strict = "strict"
+
+    var displayName: String {
+        switch self {
+        case .chill: return "Chill"
+        case .normal: return "Normal"
+        case .strict: return "Strict"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .chill: return "Relaxed monitoring, rare warnings"
+        case .normal: return "Balanced feedback"
+        case .strict: return "Strict focus tracking"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .chill: return "leaf.fill"
+        case .normal: return "circle.fill"
+        case .strict: return "bolt.fill"
+        }
+    }
+
+    // How long before robot starts warning (grace period multiplier)
+    var gracePeriodMultiplier: Double {
+        switch self {
+        case .chill: return 2.0    // 2x longer grace period
+        case .normal: return 1.0
+        case .strict: return 0.5   // Half the grace period
+        }
+    }
+
+    // How quickly attention drops
+    var attentionDecayMultiplier: Double {
+        switch self {
+        case .chill: return 0.5    // Slower decay
+        case .normal: return 1.0
+        case .strict: return 1.5   // Faster decay
+        }
+    }
+
+    // Volume of warning sounds
+    var soundVolume: Float {
+        switch self {
+        case .chill: return 0.5    // Quieter
+        case .normal: return 1.0
+        case .strict: return 1.2   // Slightly louder
+        }
+    }
+}
+
+// MARK: - Pomodoro Statistics
+
+struct PomodoroStatistics: Codable {
+    var totalPomodorosCompleted: Int = 0
+    var totalWorkMinutes: Int = 0
+    var totalBreakMinutes: Int = 0
+    var longestStreak: Int = 0
+    var currentStreak: Int = 0
+    var lastPomodoroDate: Date?
+
+    // Weekly stats
+    var weeklyPomodorosCompleted: Int = 0
+    var weekStartDate: Date?
+
+    // Best day
+    var bestDayPomodorosCount: Int = 0
+    var bestDayDate: Date?
+
+    var averageDailyPomodoros: Double {
+        guard let firstDate = weekStartDate else { return 0 }
+        let days = max(1, Calendar.current.dateComponents([.day], from: firstDate, to: Date()).day ?? 1)
+        return Double(weeklyPomodorosCompleted) / Double(days)
+    }
+
+    var totalFocusHours: Double {
+        Double(totalWorkMinutes) / 60.0
+    }
+}
+
+struct DailyFocusStats: Codable, Identifiable {
+    var id: String { dateString }
+    let dateString: String  // "2025-01-15"
+    var pomodorosCompleted: Int = 0
+    var focusMinutes: Int = 0
+    var distractionCount: Int = 0
+    var efficiencyPercent: Double = 100
+
+    var date: Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: dateString)
+    }
+
+    static func todayKey() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 }

@@ -145,7 +145,6 @@ class FocusViewModel: ObservableObject {
 
     private func updateLegacyState() {
         let previousState = robotState
-        let previousMood = attentionState.mood
 
         switch attentionState.mood {
         case .happy, .proud, .love, .celebrating:

@@ -18,7 +18,7 @@ class AttentionState: ObservableObject {
 
     // Grace period — не ругаемся сразу, даём время вернуться
     var lookAwayStart: Date?
-    let gracePeriod: TimeInterval = 2.0  // 2 секунды "прощения"
+    let baseGracePeriod: TimeInterval = 2.0  // Базовые 2 секунды "прощения"
 
     // Для плавных переходов
     var targetLevel: Double = 1.0
@@ -26,6 +26,17 @@ class AttentionState: ObservableObject {
 
     // Ссылка на настройки для памяти робота
     weak var settings: AppSettings?
+
+    // Эффективный grace period с учётом strictness
+    private var effectiveGracePeriod: TimeInterval {
+        let multiplier = settings?.strictnessMode.gracePeriodMultiplier ?? 1.0
+        return baseGracePeriod * multiplier
+    }
+
+    // Множитель decay с учётом strictness
+    private var decayMultiplier: Double {
+        return settings?.strictnessMode.attentionDecayMultiplier ?? 1.0
+    }
 
     func updateAttention(faceVisible: Bool, lookingAtScreen: Bool, headAngle: Double) {
         let previousLevel = level
@@ -46,13 +57,13 @@ class AttentionState: ObservableObject {
 
             let lookAwayDuration = Date().timeIntervalSince(lookAwayStart ?? Date())
 
-            if lookAwayDuration < gracePeriod {
+            if lookAwayDuration < effectiveGracePeriod {
                 // Ещё в grace period — не снижаем, но и не повышаем
                 // Робот показывает что заметил, но пока не ругается
             } else {
                 // Grace period прошёл — теперь снижаем
                 let anglePenalty = min(headAngle / 0.5, 1.0) * 0.08
-                targetLevel = max(0.0, targetLevel - (0.04 + anglePenalty) * timeMultiplier)
+                targetLevel = max(0.0, targetLevel - (0.04 + anglePenalty) * timeMultiplier * decayMultiplier)
             }
         } else {
             // Не видно лица — тоже grace period
@@ -62,11 +73,11 @@ class AttentionState: ObservableObject {
 
             let awayDuration = Date().timeIntervalSince(lookAwayStart ?? Date())
 
-            if awayDuration < gracePeriod * 1.5 {
+            if awayDuration < effectiveGracePeriod * 1.5 {
                 // Больший grace period когда лица не видно (может пьёт кофе)
             } else {
                 // Снижаем уровень (ночью медленнее)
-                targetLevel = max(0.0, targetLevel - 0.08 * timeMultiplier)
+                targetLevel = max(0.0, targetLevel - 0.08 * timeMultiplier * decayMultiplier)
             }
         }
 

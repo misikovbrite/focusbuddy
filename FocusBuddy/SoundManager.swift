@@ -190,4 +190,94 @@ class SoundManager {
             (frequency: 330, duration: 0.2, delay: 0)
         ], volume: 0.1)
     }
+
+    /// Surprised chirp — for reacting to loud sounds
+    func playSurprisedSound() {
+        // Quick high-low pattern (startled)
+        playMelody([
+            (frequency: 880, duration: 0.05, delay: 0),
+            (frequency: 660, duration: 0.08, delay: 0.05)
+        ], volume: 0.07)
+    }
+}
+
+// MARK: - Microphone Level Monitor
+
+class MicrophoneMonitor: ObservableObject {
+    @Published var currentLevel: Float = 0.0
+    @Published var isLoudSound: Bool = false
+
+    private var audioEngine: AVAudioEngine?
+    private var inputNode: AVAudioInputNode?
+    private var isMonitoring = false
+    private var loudThreshold: Float = 0.5  // Adjustable threshold
+    private var lastLoudSoundTime: Date?
+
+    init() {
+        setupAudioInput()
+    }
+
+    private func setupAudioInput() {
+        audioEngine = AVAudioEngine()
+        inputNode = audioEngine?.inputNode
+    }
+
+    func startMonitoring() {
+        guard !isMonitoring, let engine = audioEngine, let input = inputNode else { return }
+
+        let format = input.outputFormat(forBus: 0)
+
+        // Install tap to monitor audio levels
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            guard let self = self else { return }
+
+            // Calculate RMS (root mean square) of the audio buffer
+            guard let channelData = buffer.floatChannelData?[0] else { return }
+            let frameLength = Int(buffer.frameLength)
+
+            var sum: Float = 0
+            for i in 0..<frameLength {
+                sum += channelData[i] * channelData[i]
+            }
+            let rms = sqrtf(sum / Float(frameLength))
+
+            // Update on main thread
+            DispatchQueue.main.async {
+                self.currentLevel = rms
+
+                // Check for loud sound (with cooldown)
+                let now = Date()
+                if rms > self.loudThreshold {
+                    if self.lastLoudSoundTime == nil || now.timeIntervalSince(self.lastLoudSoundTime!) > 3.0 {
+                        self.isLoudSound = true
+                        self.lastLoudSoundTime = now
+
+                        // Reset after a moment
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.isLoudSound = false
+                        }
+                    }
+                }
+            }
+        }
+
+        do {
+            try engine.start()
+            isMonitoring = true
+        } catch {
+            print("Failed to start microphone monitoring: \(error)")
+        }
+    }
+
+    func stopMonitoring() {
+        guard isMonitoring else { return }
+
+        inputNode?.removeTap(onBus: 0)
+        audioEngine?.stop()
+        isMonitoring = false
+    }
+
+    deinit {
+        stopMonitoring()
+    }
 }

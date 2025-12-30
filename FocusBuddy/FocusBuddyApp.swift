@@ -105,12 +105,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func openSettings() {
         if settingsWindow == nil {
             settingsWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 320, height: 400),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+                styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false
             )
-            settingsWindow?.title = "FocusBuddy — Settings"
+            settingsWindow?.title = "FocusBuddy"
+            settingsWindow?.titlebarAppearsTransparent = true
+            settingsWindow?.titleVisibility = .hidden
             settingsWindow?.center()
         }
 
@@ -190,372 +192,1331 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 }
 
-// MARK: - Окно настроек
+// MARK: - Окно настроек (Redesigned)
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var viewModel: FocusViewModel
-    @State private var showDebug = false
+    @State private var selectedTab: SettingsTab = .general
     @State private var newWhitelistSite = ""
+    @State private var robotMood: RobotMood = .happy
+    @State private var isHoveringRobot = false
 
-    var body: some View {
-        TabView {
-            // Main settings
-            mainSettingsTab
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
+    enum SettingsTab: String, CaseIterable {
+        case general = "General"
+        case pomodoro = "Pomodoro"
+        case statistics = "Statistics"
+        case whitelist = "Whitelist"
+        case debug = "Debug"
 
-            // Pomodoro
-            pomodoroTab
-                .tabItem {
-                    Label("Pomodoro", systemImage: "timer")
-                }
-
-            // Whitelist
-            whitelistTab
-                .tabItem {
-                    Label("Whitelist", systemImage: "checkmark.shield")
-                }
-
-            // Debug panel
-            debugTab
-                .tabItem {
-                    Label("Debug", systemImage: "ant")
-                }
+        var icon: String {
+            switch self {
+            case .general: return "slider.horizontal.3"
+            case .pomodoro: return "timer"
+            case .statistics: return "chart.bar"
+            case .whitelist: return "checkmark.shield"
+            case .debug: return "ant"
+            }
         }
-        .frame(width: 380, height: 520)
     }
 
-    var mainSettingsTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Timing
-                GroupBox("Timing") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        VStack(alignment: .leading) {
-                            Text("Warning after: \(String(format: "%.1f", settings.warningDelay)) sec")
-                                .font(.caption)
-                            Slider(value: $settings.warningDelay, in: 1...5, step: 0.5)
-                        }
+    var body: some View {
+        HStack(spacing: 0) {
+            // Sidebar
+            sidebarView
+                .frame(width: 180)
 
-                        VStack(alignment: .leading) {
-                            Text("Distracted after: \(String(format: "%.1f", settings.distractedDelay)) sec")
-                                .font(.caption)
-                            Slider(value: $settings.distractedDelay, in: 2...10, step: 0.5)
+            // Divider
+            Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .frame(width: 1)
+
+            // Content
+            ScrollView {
+                VStack(spacing: 0) {
+                    switch selectedTab {
+                    case .general:
+                        generalContent
+                    case .pomodoro:
+                        pomodoroContent
+                    case .statistics:
+                        statisticsContent
+                    case .whitelist:
+                        whitelistContent
+                    case .debug:
+                        debugContent
+                    }
+                }
+                .padding(24)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(width: 560, height: 520)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    // MARK: - Sidebar
+
+    // Настроение робота в зависимости от strictness mode
+    private var strictnessMood: RobotMood {
+        switch settings.strictnessMode {
+        case .chill: return .sleepy      // Расслабленный, полузакрытые глаза
+        case .normal: return .happy      // Обычный, довольный
+        case .strict: return .proud      // Собранный, серьёзный но не злой
+        }
+    }
+
+    // Цвет glow в зависимости от strictness
+    private var strictnessGlowColor: Color {
+        switch settings.strictnessMode {
+        case .chill: return .green
+        case .normal: return .blue
+        case .strict: return .orange
+        }
+    }
+
+    // Наклон головы робота
+    private var strictnessHeadTilt: Double {
+        switch settings.strictnessMode {
+        case .chill: return -3       // Слегка наклонена, расслаблен
+        case .normal: return 0       // Прямо
+        case .strict: return 2       // Слегка приподнята, внимателен
+        }
+    }
+
+    var sidebarView: some View {
+        VStack(spacing: 0) {
+            // Robot header
+            VStack(spacing: 8) {
+                ZStack {
+                    // Glow effect — меняется от strictness mode
+                    Circle()
+                        .fill(isHoveringRobot ? robotMood.eyeColor.opacity(0.2) : strictnessGlowColor.opacity(0.15))
+                        .frame(width: 80, height: 80)
+                        .blur(radius: 20)
+                        .animation(.easeInOut(duration: 0.4), value: settings.strictnessMode)
+
+                    // Второй слой glow для strict mode — более интенсивный
+                    if settings.strictnessMode == .strict {
+                        Circle()
+                            .fill(Color.orange.opacity(0.1))
+                            .frame(width: 100, height: 100)
+                            .blur(radius: 30)
+                    }
+
+                    RobotFace(
+                        mood: isHoveringRobot ? robotMood : strictnessMood,
+                        eyeOffset: .zero,
+                        isBlinking: false,
+                        eyeSquint: isHoveringRobot ? 0.3 : (settings.strictnessMode == .chill ? 0.4 : 0),
+                        antennaGlow: true,
+                        headTilt: isHoveringRobot ? 5 : strictnessHeadTilt,
+                        bounce: 0
+                    )
+                    .scaleEffect(2.8)
+                    .animation(.easeInOut(duration: 0.3), value: settings.strictnessMode)
+                }
+                .frame(height: 70)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isHoveringRobot = hovering
+                        if hovering {
+                            robotMood = .love
+                        } else {
+                            robotMood = strictnessMood
                         }
                     }
-                    .padding(8)
                 }
 
-                // Sound
-                GroupBox("Sound") {
-                    Toggle("Enable sounds", isOn: $settings.soundEnabled)
-                        .padding(8)
+                Text("FocusBuddy")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+
+                // Status pill — показывает и strictness mode
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(strictnessGlowColor)
+                        .frame(width: 6, height: 6)
+                    Text(settings.strictnessMode.displayName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(strictnessGlowColor.opacity(0.1))
+                .cornerRadius(10)
+                .animation(.easeInOut(duration: 0.2), value: settings.strictnessMode)
+            }
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+
+            Divider()
+                .padding(.horizontal, 16)
+
+            // Navigation items
+            VStack(spacing: 4) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    SidebarItem(
+                        icon: tab.icon,
+                        title: tab.rawValue,
+                        isSelected: selectedTab == tab
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedTab = tab
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 16)
+
+            Spacer()
+
+            // Version info
+            Text("v1.0.0")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary.opacity(0.5))
+                .padding(.bottom, 16)
+        }
+        .background(Color.primary.opacity(0.02))
+    }
+
+    // MARK: - General Content
+
+    var generalContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Section header
+            SectionHeader(title: "Settings", subtitle: "Customize your focus experience")
+
+            // Strictness Mode Card
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Focus Mode", systemImage: "brain.head.profile")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 8) {
+                        ForEach(StrictnessMode.allCases, id: \.self) { mode in
+                            StrictnessPill(
+                                mode: mode,
+                                isSelected: settings.strictnessMode == mode
+                            ) {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    settings.strictnessMode = mode
+                                }
+                            }
+                        }
+                    }
+
+                    Text(settings.strictnessMode.description)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Timing Card
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Label("Timing", systemImage: "clock")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    // Warning slider
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Warning delay")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(String(format: "%.1f", settings.warningDelay))s")
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .foregroundColor(.yellow)
+                        }
+                        CustomSlider(value: $settings.warningDelay, range: 1...5, color: .yellow)
+                    }
+
+                    // Distracted slider
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Distraction threshold")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("\(String(format: "%.1f", settings.distractedDelay))s")
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .foregroundColor(.orange)
+                        }
+                        CustomSlider(value: $settings.distractedDelay, range: 2...10, color: .orange)
+                    }
+                }
+            }
+            .onChange(of: settings.warningDelay) { _, new in
+                viewModel.warningThreshold = new
+            }
+            .onChange(of: settings.distractedDelay) { _, new in
+                viewModel.distractedThreshold = new
+            }
+
+            // Sound & Sensitivity
+            HStack(spacing: 16) {
+                // Sound toggle
+                SettingsCard {
+                    HStack {
+                        Label("Sound", systemImage: settings.soundEnabled ? "speaker.wave.2" : "speaker.slash")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Toggle("", isOn: $settings.soundEnabled)
+                            .toggleStyle(.switch)
+                            .scaleEffect(0.8)
+                    }
                 }
 
                 // Sensitivity
-                GroupBox("Sensitivity") {
+                SettingsCard {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("How far you need to look away:")
-                            .font(.caption)
-                        HStack {
-                            Text("Low")
-                                .font(.caption2)
-                            Slider(value: $settings.sensitivity, in: 0.3...0.7, step: 0.1)
-                            Text("High")
-                                .font(.caption2)
-                        }
+                        Label("Sensitivity", systemImage: "eye")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                        CustomSlider(value: $settings.sensitivity, range: 0.3...0.7, color: .blue)
                     }
-                    .padding(8)
-                }
-
-                // Statistics
-                GroupBox("Session") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Focused:")
-                            Spacer()
-                            Text(viewModel.focusStats.formattedFocusedTime)
-                                .foregroundColor(.green)
-                                .fontWeight(.medium)
-                        }
-                        HStack {
-                            Text("Distractions:")
-                            Spacer()
-                            Text("\(viewModel.focusStats.distractionCount)")
-                                .foregroundColor(.orange)
-                                .fontWeight(.medium)
-                        }
-                        HStack {
-                            Text("Efficiency:")
-                            Spacer()
-                            Text(String(format: "%.0f%%", viewModel.focusStats.focusPercentage))
-                                .foregroundColor(.blue)
-                                .fontWeight(.medium)
-                        }
-                    }
-                    .padding(8)
-                }
-
-                // Reset button
-                Button("Reset Statistics") {
-                    viewModel.resetStats()
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(20)
-        }
-        .onChange(of: settings.warningDelay) { _, new in
-            viewModel.warningThreshold = new
-        }
-        .onChange(of: settings.distractedDelay) { _, new in
-            viewModel.distractedThreshold = new
-        }
-    }
-
-    // MARK: - Pomodoro Tab
-
-    var pomodoroTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Статус Pomodoro
-                GroupBox {
-                    VStack(spacing: 12) {
-                        // Большой таймер
-                        Text(settings.pomodoroTimeFormatted)
-                            .font(.system(size: 48, weight: .light, design: .monospaced))
-                            .foregroundColor(settings.pomodoroState.color)
-
-                        // Статус
-                        HStack {
-                            Circle()
-                                .fill(settings.pomodoroState.color)
-                                .frame(width: 8, height: 8)
-                            Text(settings.pomodoroState.displayName)
-                                .font(.headline)
-                        }
-
-                        // Control buttons
-                        HStack(spacing: 12) {
-                            if settings.pomodoroState == .idle {
-                                Button("Start") {
-                                    settings.startPomodoro()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.green)
-                            } else {
-                                Button("Stop") {
-                                    settings.stopPomodoro()
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
-
-                                if settings.pomodoroState == .working {
-                                    Button("Break") {
-                                        settings.startBreak()
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .tint(.blue)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(12)
-                }
-
-                // Time settings
-                GroupBox("Duration") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Work:")
-                            Spacer()
-                            Stepper("\(settings.pomodoroWorkMinutes) min",
-                                    value: $settings.pomodoroWorkMinutes,
-                                    in: 5...60, step: 5)
-                        }
-
-                        HStack {
-                            Text("Break:")
-                            Spacer()
-                            Stepper("\(settings.pomodoroBreakMinutes) min",
-                                    value: $settings.pomodoroBreakMinutes,
-                                    in: 1...30, step: 1)
-                        }
-                    }
-                    .padding(8)
-                }
-
-                // Info
-                GroupBox("How it works") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("• During work, robot monitors your focus")
-                            .font(.caption)
-                        Text("• During breaks, distractions are allowed")
-                            .font(.caption)
-                        Text("• Notifications remind you when to switch")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                    .padding(8)
                 }
             }
-            .padding(20)
-        }
-    }
 
-    // MARK: - Whitelist Tab
-
-    var whitelistTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Add site
-                GroupBox("Add Site") {
+            // Session Stats Card
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        TextField("e.g. notion", text: $newWhitelistSite)
-                            .textFieldStyle(.roundedBorder)
-
-                        Button("Add") {
-                            if !newWhitelistSite.isEmpty {
-                                settings.addToWhitelist(newWhitelistSite)
-                                newWhitelistSite = ""
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(newWhitelistSite.isEmpty)
-                    }
-                    .padding(8)
-                }
-
-                // Current list
-                GroupBox("Allowed Sites") {
-                    if settings.whitelistedSites.isEmpty {
-                        Text("Empty. Add sites that shouldn't be considered distracting.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(8)
-                    } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(settings.whitelistedSites, id: \.self) { site in
-                                HStack {
-                                    Text(site)
-                                    Spacer()
-                                    Button {
-                                        settings.removeFromWhitelist(site)
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.red.opacity(0.7))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(4)
-                            }
-                        }
-                        .padding(8)
-                    }
-                }
-
-                // Default distracting list
-                GroupBox("Distracting by Default") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Instagram, TikTok, Twitter/X, Facebook, VK, Reddit, Telegram, YouTube, Netflix, Twitch")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-
-                        Text("\nAdd a site to whitelist to prevent robot warnings.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(8)
-                }
-            }
-            .padding(20)
-        }
-    }
-
-    var debugTab: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Emotion Test")
-                    .font(.headline)
-
-                Text("Click on an emotion to see it on the robot:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                // Сетка эмоций
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 10) {
-                    ForEach(RobotMood.allCases, id: \.self) { mood in
-                        EmotionButton(
-                            mood: mood,
-                            isSelected: viewModel.attentionState.mood == mood
-                        ) {
-                            viewModel.attentionState.setMood(mood)
-                        }
-                    }
-                }
-
-                Divider()
-                    .padding(.vertical, 8)
-
-                // Current state
-                GroupBox("Current State") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Emotion:")
-                            Spacer()
-                            Text(viewModel.attentionState.mood.displayName)
-                                .foregroundColor(viewModel.attentionState.mood.eyeColor)
-                                .fontWeight(.medium)
-                        }
-                        HStack {
-                            Text("Attention level:")
-                            Spacer()
-                            Text(String(format: "%.0f%%", viewModel.attentionState.level * 100))
-                                .fontWeight(.medium)
-                        }
-                        HStack {
-                            Text("Bored:")
-                            Spacer()
-                            Text(viewModel.attentionState.isBored ? "Yes" : "No")
-                                .fontWeight(.medium)
-                        }
-                    }
-                    .padding(8)
-                }
-
-                // Robot preview
-                GroupBox("Preview") {
-                    HStack {
+                        Label("Today's Session", systemImage: "chart.bar")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
                         Spacer()
+                        Button {
+                            viewModel.resetStats()
+                        } label: {
+                            Text("Reset")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    HStack(spacing: 16) {
+                        StatBadge(
+                            value: viewModel.focusStats.formattedFocusedTime,
+                            label: "Focused",
+                            color: .green
+                        )
+                        StatBadge(
+                            value: "\(viewModel.focusStats.distractionCount)",
+                            label: "Distractions",
+                            color: .orange
+                        )
+                        StatBadge(
+                            value: String(format: "%.0f%%", viewModel.focusStats.focusPercentage),
+                            label: "Efficiency",
+                            color: .blue
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Pomodoro Content
+
+    var pomodoroContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionHeader(title: "Pomodoro Timer", subtitle: "Stay focused with timed work sessions")
+
+            // Timer display
+            SettingsCard {
+                VStack(spacing: 16) {
+                    // Big timer with ring
+                    ZStack {
+                        // Background ring
+                        Circle()
+                            .stroke(Color.primary.opacity(0.1), lineWidth: 8)
+                            .frame(width: 140, height: 140)
+
+                        // Progress ring
+                        if settings.pomodoroState != .idle {
+                            Circle()
+                                .trim(from: 0, to: pomodoroProgress)
+                                .stroke(
+                                    settings.pomodoroState.color,
+                                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                                )
+                                .frame(width: 140, height: 140)
+                                .rotationEffect(.degrees(-90))
+                                .animation(.easeInOut(duration: 0.3), value: pomodoroProgress)
+                        }
+
+                        VStack(spacing: 4) {
+                            Text(settings.pomodoroTimeFormatted)
+                                .font(.system(size: 36, weight: .light, design: .monospaced))
+                                .foregroundColor(settings.pomodoroState == .idle ? .secondary : settings.pomodoroState.color)
+
+                            Text(settings.pomodoroState.displayName)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Control buttons
+                    HStack(spacing: 12) {
+                        if settings.pomodoroState == .idle {
+                            PomodoroButton(title: "Start Focus", color: .green) {
+                                settings.startPomodoro()
+                                SoundManager.shared.playPomodoroStart()
+                            }
+                        } else {
+                            PomodoroButton(title: "Stop", color: .red, isSecondary: true) {
+                                settings.stopPomodoro()
+                            }
+
+                            if settings.pomodoroState == .working {
+                                PomodoroButton(title: "Take Break", color: .blue) {
+                                    settings.startBreak()
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+
+            // Duration settings
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Label("Duration", systemImage: "hourglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 24) {
+                        DurationPicker(
+                            title: "Work",
+                            value: $settings.pomodoroWorkMinutes,
+                            range: 5...60,
+                            step: 5,
+                            color: .green
+                        )
+
+                        DurationPicker(
+                            title: "Break",
+                            value: $settings.pomodoroBreakMinutes,
+                            range: 1...30,
+                            step: 1,
+                            color: .blue
+                        )
+                    }
+                }
+            }
+
+            // Tips
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Tips", systemImage: "lightbulb")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        TipRow(icon: "hand.wave", text: "Wave to start/stop timer")
+                        TipRow(icon: "hand.raised", text: "Peace sign ✌️ to toggle break")
+                        TipRow(icon: "bell", text: "Robot alerts you when distracted")
+                    }
+                }
+            }
+        }
+    }
+
+    private var pomodoroProgress: Double {
+        guard settings.pomodoroState != .idle else { return 0 }
+        let totalTime: Double
+        if settings.pomodoroState == .working {
+            totalTime = Double(settings.pomodoroWorkMinutes * 60)
+        } else {
+            totalTime = Double(settings.pomodoroBreakMinutes * 60)
+        }
+        guard totalTime > 0 else { return 0 }
+        return 1.0 - (settings.pomodoroTimeRemaining / totalTime)
+    }
+
+    // MARK: - Whitelist Content
+
+    var whitelistContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionHeader(title: "Whitelist", subtitle: "Sites that won't trigger robot warnings")
+
+            // Add site
+            SettingsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 18))
+
+                    TextField("Add site (e.g. notion, figma)", text: $newWhitelistSite)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+
+                    if !newWhitelistSite.isEmpty {
+                        Button {
+                            settings.addToWhitelist(newWhitelistSite)
+                            newWhitelistSite = ""
+                        } label: {
+                            Text("Add")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.green)
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Allowed sites
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Allowed Sites", systemImage: "checkmark.shield")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    if settings.whitelistedSites.isEmpty {
+                        HStack {
+                            Spacer()
+                            VStack(spacing: 8) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.secondary.opacity(0.5))
+                                Text("No sites added yet")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 20)
+                            Spacer()
+                        }
+                    } else {
+                        FlowLayout(spacing: 8) {
+                            ForEach(settings.whitelistedSites, id: \.self) { site in
+                                WhitelistChip(site: site) {
+                                    settings.removeFromWhitelist(site)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Blocked by default
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Blocked by Default", systemImage: "nosign")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    FlowLayout(spacing: 8) {
+                        ForEach(["Instagram", "TikTok", "Twitter", "Facebook", "Reddit", "YouTube", "Netflix", "Twitch"], id: \.self) { site in
+                            Text(site)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.red.opacity(0.8))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(12)
+                        }
+                    }
+
+                    Text("Add a site to whitelist above to allow it")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - Statistics Content
+
+    var statisticsContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionHeader(title: "Statistics", subtitle: "Track your focus progress")
+
+            // Overview Cards
+            HStack(spacing: 12) {
+                StatOverviewCard(
+                    title: "Total Pomodoros",
+                    value: "\(settings.pomodoroStats.totalPomodorosCompleted)",
+                    icon: "checkmark.circle.fill",
+                    color: .green
+                )
+
+                StatOverviewCard(
+                    title: "Focus Hours",
+                    value: String(format: "%.1f", settings.pomodoroStats.totalFocusHours),
+                    icon: "clock.fill",
+                    color: .blue
+                )
+
+                StatOverviewCard(
+                    title: "Current Streak",
+                    value: "\(settings.pomodoroStats.currentStreak)",
+                    subtitle: "days",
+                    icon: "flame.fill",
+                    color: .orange
+                )
+            }
+
+            // Weekly Progress
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label("This Week", systemImage: "calendar")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text("\(settings.pomodoroStats.weeklyPomodorosCompleted) pomodoros")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    // Week chart
+                    WeeklyChart(stats: settings.getWeekStats())
+                }
+            }
+
+            // Records & Achievements
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Records", systemImage: "trophy.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 16) {
+                        RecordItem(
+                            title: "Longest Streak",
+                            value: "\(settings.pomodoroStats.longestStreak) days",
+                            icon: "flame",
+                            color: .orange
+                        )
+
+                        RecordItem(
+                            title: "Best Day",
+                            value: "\(settings.pomodoroStats.bestDayPomodorosCount) pomodoros",
+                            icon: "star",
+                            color: .yellow
+                        )
+
+                        RecordItem(
+                            title: "Avg. Daily",
+                            value: String(format: "%.1f", settings.pomodoroStats.averageDailyPomodoros),
+                            icon: "chart.line.uptrend.xyaxis",
+                            color: .green
+                        )
+                    }
+                }
+            }
+
+            // Today's Details
+            if let todayStats = settings.getTodayStats() {
+                SettingsCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Today", systemImage: "sun.max.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.primary)
+
+                        HStack(spacing: 16) {
+                            TodayStat(label: "Pomodoros", value: "\(todayStats.pomodorosCompleted)", color: .green)
+                            TodayStat(label: "Focus Time", value: "\(todayStats.focusMinutes) min", color: .blue)
+                            TodayStat(label: "Distractions", value: "\(todayStats.distractionCount)", color: .orange)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Debug Content
+
+    var debugContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            SectionHeader(title: "Debug", subtitle: "Test robot emotions and states")
+
+            // Emotion grid
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Test Emotions", systemImage: "face.smiling")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 8) {
+                        ForEach(RobotMood.allCases, id: \.self) { mood in
+                            EmotionChip(
+                                mood: mood,
+                                isSelected: viewModel.attentionState.mood == mood
+                            ) {
+                                viewModel.attentionState.setMood(mood)
+                                robotMood = mood
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Robot preview
+            SettingsCard {
+                HStack {
+                    Spacer()
+                    ZStack {
+                        Circle()
+                            .fill(viewModel.attentionState.mood.eyeColor.opacity(0.15))
+                            .frame(width: 100, height: 100)
+                            .blur(radius: 20)
+
                         RobotFace(
                             mood: viewModel.attentionState.mood,
                             eyeOffset: .zero,
                             isBlinking: false,
-                            eyeSquint: 1.0,
+                            eyeSquint: 0,
                             antennaGlow: true,
                             headTilt: 0,
                             bounce: 0
                         )
-                        .scaleEffect(2.5)
-                        .frame(height: 80)
-                        Spacer()
+                        .scaleEffect(3.5)
                     }
-                    .padding(20)
-                    .background(Color.black.opacity(0.8))
-                    .cornerRadius(8)
+                    .frame(height: 100)
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(12)
+            }
+
+            // State info
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Current State", systemImage: "info.circle")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 16) {
+                        DebugStat(label: "Mood", value: viewModel.attentionState.mood.displayName, color: viewModel.attentionState.mood.eyeColor)
+                        DebugStat(label: "Attention", value: String(format: "%.0f%%", viewModel.attentionState.level * 100), color: .blue)
+                        DebugStat(label: "Bored", value: viewModel.attentionState.isBored ? "Yes" : "No", color: viewModel.attentionState.isBored ? .orange : .green)
+                    }
                 }
             }
-            .padding(20)
+
+            // Camera debug
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Camera State", systemImage: "camera")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 16) {
+                        DebugStat(
+                            label: "Face",
+                            value: viewModel.cameraManager.isFaceDetected ? "Yes" : "No",
+                            color: viewModel.cameraManager.isFaceDetected ? .green : .red
+                        )
+                        DebugStat(
+                            label: "Angle",
+                            value: String(format: "%.2f", viewModel.cameraManager.headAngle),
+                            color: viewModel.cameraManager.headAngle < 0.4 ? .green : .orange
+                        )
+                        DebugStat(
+                            label: "FaceX",
+                            value: String(format: "%.2f", viewModel.cameraManager.facePositionX),
+                            color: .blue
+                        )
+                    }
+                }
+            }
+
+            // Reset actions
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    Button("Reset Wake-up Animation") {
+                        settings.hasSeenWakeUpAnimation = false
+                        UserDefaults.standard.set(false, forKey: "hasSeenWakeUpAnimation")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Text("Restart app to see wake-up animation again")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
         }
+    }
+}
+
+// MARK: - Supporting Components
+
+struct SidebarItem: View {
+    let icon: String
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? .white : .secondary)
+                    .frame(width: 20)
+
+                Text(title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? .white : .primary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.accentColor : (isHovered ? Color.primary.opacity(0.05) : Color.clear))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+struct SectionHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
+            Text(subtitle)
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+        }
+        .padding(.bottom, 4)
+    }
+}
+
+struct SettingsCard<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.04))
+            .cornerRadius(12)
+    }
+}
+
+struct StrictnessPill: View {
+    let mode: StrictnessMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 16))
+                Text(mode.displayName)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(isSelected ? .white : .secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? modeColor : (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04)))
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var modeColor: Color {
+        switch mode {
+        case .chill: return .green
+        case .normal: return .blue
+        case .strict: return .orange
+        }
+    }
+}
+
+struct CustomSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                // Track background
+                Capsule()
+                    .fill(Color.primary.opacity(0.1))
+                    .frame(height: 6)
+
+                // Filled track
+                Capsule()
+                    .fill(color.opacity(0.8))
+                    .frame(width: max(0, (value - range.lowerBound) / (range.upperBound - range.lowerBound) * geometry.size.width), height: 6)
+
+                // Thumb
+                Circle()
+                    .fill(color)
+                    .frame(width: 16, height: 16)
+                    .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .offset(x: (value - range.lowerBound) / (range.upperBound - range.lowerBound) * (geometry.size.width - 16))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { gesture in
+                                let newValue = range.lowerBound + (gesture.location.x / geometry.size.width) * (range.upperBound - range.lowerBound)
+                                value = min(max(newValue, range.lowerBound), range.upperBound)
+                            }
+                    )
+            }
+        }
+        .frame(height: 16)
+    }
+}
+
+struct StatBadge: View {
+    let value: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(color.opacity(0.1))
+        .cornerRadius(10)
+    }
+}
+
+struct PomodoroButton: View {
+    let title: String
+    let color: Color
+    var isSecondary: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(isSecondary ? color : .white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSecondary ? color.opacity(isHovered ? 0.15 : 0.1) : color.opacity(isHovered ? 0.9 : 1))
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+struct DurationPicker: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 12) {
+                Button {
+                    if value > range.lowerBound {
+                        value -= step
+                    }
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(value <= range.lowerBound ? .secondary.opacity(0.3) : color)
+                }
+                .buttonStyle(.plain)
+                .disabled(value <= range.lowerBound)
+
+                Text("\(value)")
+                    .font(.system(size: 24, weight: .semibold, design: .rounded))
+                    .foregroundColor(color)
+                    .frame(width: 50)
+
+                Button {
+                    if value < range.upperBound {
+                        value += step
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(value >= range.upperBound ? .secondary.opacity(0.3) : color)
+                }
+                .buttonStyle(.plain)
+                .disabled(value >= range.upperBound)
+            }
+
+            Text("min")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(color.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+struct TipRow: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(width: 20)
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+struct WhitelistChip: View {
+    let site: String
+    let onRemove: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(site)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.green)
+
+            if isHovered {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.green.opacity(0.1))
+        .cornerRadius(14)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = layout(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(proposal: proposal, subviews: subviews)
+        for (index, frame) in result.frames.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: .unspecified)
+        }
+    }
+
+    private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
+        var frames: [CGRect] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        let maxWidth = proposal.width ?? .infinity
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+
+            if currentX + size.width > maxWidth && currentX > 0 {
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+
+            frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
+            currentX += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+
+        let totalHeight = currentY + lineHeight
+        return (CGSize(width: maxWidth, height: totalHeight), frames)
+    }
+}
+
+struct EmotionChip: View {
+    let mood: RobotMood
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Circle()
+                    .fill(mood.eyeColor)
+                    .frame(width: 20, height: 20)
+                    .shadow(color: isSelected ? mood.eyeColor.opacity(0.5) : .clear, radius: 4)
+                Text(mood.displayName)
+                    .font(.system(size: 9))
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? mood.eyeColor.opacity(0.15) : (isHovered ? Color.primary.opacity(0.05) : Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? mood.eyeColor.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+struct DebugStat: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Statistics Components
+
+struct StatOverviewCard: View {
+    let title: String
+    let value: String
+    var subtitle: String? = nil
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundColor(color)
+
+            VStack(spacing: 2) {
+                Text(value)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(.primary)
+
+                if let sub = subtitle {
+                    Text(sub)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(color.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+struct WeeklyChart: View {
+    let stats: [DailyFocusStats]
+
+    private let daysOfWeek = ["M", "T", "W", "T", "F", "S", "S"]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<7, id: \.self) { index in
+                let dayStats = getDayStats(for: index)
+                VStack(spacing: 4) {
+                    // Bar
+                    ZStack(alignment: .bottom) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.primary.opacity(0.05))
+                            .frame(width: 28, height: 60)
+
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(barColor(for: dayStats.pomodorosCompleted))
+                            .frame(width: 28, height: barHeight(for: dayStats.pomodorosCompleted))
+                    }
+
+                    // Day label
+                    Text(daysOfWeek[index])
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(isToday(index) ? .primary : .secondary)
+
+                    // Count
+                    Text("\(dayStats.pomodorosCompleted)")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func getDayStats(for weekdayIndex: Int) -> DailyFocusStats {
+        let calendar = Calendar.current
+        let today = Date()
+
+        // Find the Monday of this week
+        let weekday = calendar.component(.weekday, from: today)
+        let daysFromMonday = (weekday + 5) % 7  // Convert to Monday = 0
+        guard let monday = calendar.date(byAdding: .day, value: -daysFromMonday, to: today) else {
+            return DailyFocusStats(dateString: "")
+        }
+
+        guard let targetDate = calendar.date(byAdding: .day, value: weekdayIndex, to: monday) else {
+            return DailyFocusStats(dateString: "")
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let targetKey = formatter.string(from: targetDate)
+
+        return stats.first(where: { $0.dateString == targetKey }) ?? DailyFocusStats(dateString: targetKey)
+    }
+
+    private func isToday(_ weekdayIndex: Int) -> Bool {
+        let calendar = Calendar.current
+        let today = Date()
+        let weekday = calendar.component(.weekday, from: today)
+        let todayIndex = (weekday + 5) % 7
+        return weekdayIndex == todayIndex
+    }
+
+    private func barHeight(for count: Int) -> CGFloat {
+        let maxHeight: CGFloat = 60
+        let maxCount = max(stats.map { $0.pomodorosCompleted }.max() ?? 1, 4)
+        return max(4, CGFloat(count) / CGFloat(maxCount) * maxHeight)
+    }
+
+    private func barColor(for count: Int) -> Color {
+        if count == 0 { return Color.gray.opacity(0.3) }
+        if count >= 4 { return .green }
+        if count >= 2 { return .blue }
+        return .orange
+    }
+}
+
+struct RecordItem: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(color)
+
+            Text(value)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.primary)
+
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(color.opacity(0.08))
+        .cornerRadius(8)
+    }
+}
+
+struct TodayStat: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -655,7 +1616,9 @@ struct ExtendedNotchView: View {
     var onStopPomodoro: (() -> Void)?
 
     @StateObject private var mouseTracker = MouseTracker()
+    @StateObject private var microphoneMonitor = MicrophoneMonitor()
     @State private var isBlinking: Bool = false
+    @State private var isSurprised: Bool = false  // Surprised by loud sound
     @State private var bounce: CGFloat = 0
     @State private var headTilt: Double = 0
     @State private var antennaGlow: Bool = false
@@ -675,22 +1638,90 @@ struct ExtendedNotchView: View {
     @State private var microBounce: CGFloat = 0  // Микро-подпрыгивания
     @State private var lastIdleAction: Date = Date()  // Время последнего idle действия
     @State private var gestureRecognizedScale: CGFloat = 1.0  // Визуальный feedback жеста
+    @State private var showOnboardingTip: Bool = false  // Показывать подсказку
+    @State private var onboardingStep: Int = 0  // Шаг онбординга
+    @State private var greetingMessage: String? = nil  // Персональное приветствие
+    @State private var showGreeting: Bool = false  // Показывать приветствие
+
+    // WOW Effects
+    @State private var isWakingUp: Bool = false  // Анимация пробуждения
+    @State private var wakeUpPhase: Int = 0  // Фаза пробуждения (0-5)
+    @State private var peekOffset: CGFloat = -30  // Offset для "выглядывания" из notch
+    @State private var isPeeking: Bool = false  // Выглядывает из норки
+    @State private var stareTime: Date? = nil  // Время начала пристального взгляда
+    @State private var isEmbarrassed: Bool = false  // Смущён от взгляда
+    @State private var clickCount: Int = 0  // Счётчик быстрых кликов
+    @State private var lastClickTime: Date = Date()  // Время последнего клика
+    @State private var isGiggling: Bool = false  // Хихикает от кликов
+    @State private var faceTrackingOffset: CGSize = .zero  // Offset от отслеживания лица
+    @State private var wowEffectsTimer: Timer?  // Таймер для WOW эффектов
 
     private let notchBlack = Color(nsColor: NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1))
+
+    // Onboarding messages
+    private let onboardingMessages = [
+        "👋 Hi! I'm your Focus Buddy. Click me to expand!",
+        "👆 Wave your hand to start/stop Pomodoro timer",
+        "✌️ Show peace sign to toggle break mode",
+        "🔴 I watch for distracting sites and alert you",
+        "⚙️ Right-click me for quick settings"
+    ]
 
     // Размеры при наведении и расширении
     private var currentWidth: CGFloat {
         if isExpanded { return 380 }
-        return isHovered ? baseWidth * 1.04 : baseWidth
+        return isHovered ? baseWidth * 1.02 : baseWidth  // Subtle hover effect
     }
     private var currentHeight: CGFloat {
         if isExpanded { return 160 }
-        return isHovered ? baseHeight * 1.04 : baseHeight
+        return isHovered ? baseHeight * 1.02 : baseHeight  // Subtle hover effect
+    }
+
+    // Squint для wake-up анимации
+    private var wakeUpSquint: CGFloat {
+        switch wakeUpPhase {
+        case 0: return 1.0      // Закрыты
+        case 1: return 0.8      // Чуть приоткрыты
+        case 2: return 0.5      // Полуоткрыты
+        case 3: return 0.2      // Почти открыты
+        case 4: return 0.0      // Открыты
+        case 5: return 0.3      // Прищур (осматривается)
+        default: return 0.0
+        }
+    }
+
+    // Прогресс Pomodoro (0.0 - 1.0)
+    private var pomodoroProgress: Double {
+        guard settings.pomodoroState != .idle else { return 0 }
+        let totalTime: Double
+        if settings.pomodoroState == .working {
+            totalTime = Double(settings.pomodoroWorkMinutes * 60)
+        } else {
+            totalTime = Double(settings.pomodoroBreakMinutes * 60)
+        }
+        guard totalTime > 0 else { return 0 }
+        return 1.0 - (settings.pomodoroTimeRemaining / totalTime)
     }
 
     // Куда смотрят глаза — зависит от настроения и поведения
     private var effectiveEyeOffset: CGSize {
         let mood = viewModel.attentionState.mood
+
+        // При пробуждении — глаза медленно двигаются
+        if isWakingUp {
+            switch wakeUpPhase {
+            case 0...2: return .zero  // Только открываются
+            case 3: return CGSize(width: -0.5, height: 0)  // Смотрит влево
+            case 4: return CGSize(width: 0.5, height: 0)   // Смотрит вправо
+            case 5: return .zero  // Смотрит на пользователя
+            default: return .zero
+            }
+        }
+
+        // Смущён — отводит глаза
+        if isEmbarrassed {
+            return CGSize(width: 0.6, height: 0.3)  // Смотрит в сторону и вниз
+        }
 
         // При warning/distracted/angry — смотрит прямо на пользователя
         if mood == .concerned || mood == .worried || mood == .sad || mood == .angry || mood == .skeptical {
@@ -702,15 +1733,54 @@ struct ExtendedNotchView: View {
             return CGSize(width: 0, height: 0.5)
         }
 
-        // Иначе — следует за мышкой или смотрит в случайную сторону
+        // Следует за мышкой когда она активна
         if mouseTracker.isFollowingMouse {
             return CGSize(
                 width: mouseTracker.offset.width + lookAroundOffset,
                 height: mouseTracker.offset.height
             )
+        }
+
+        // Когда мышка неактивна — смотрит на пользователя через камеру (face tracking)
+        // или в случайную сторону если face tracking недоступен
+        if faceTrackingOffset != .zero {
+            return faceTrackingOffset
         } else {
             return mouseTracker.randomLookOffset
         }
+    }
+
+    // Эффективный squint с учётом всех состояний
+    private var effectiveSquint: CGFloat {
+        if isWakingUp { return wakeUpSquint }
+        if isEmbarrassed { return 0.4 }  // Прищуривается от смущения
+        if isGiggling { return 0.5 }  // Прищуривается от смеха
+        return eyeSquint
+    }
+
+    // Эффективное настроение
+    private var effectiveMood: RobotMood {
+        if showLoveEasterEgg { return .love }
+        if isEmbarrassed { return .love }  // Смущённый = румянец
+        if isSurprised { return .surprised }  // Удивлён громким звуком
+        if isGiggling { return .happy }
+        if isWakingUp && wakeUpPhase < 4 { return .sleepy }
+        return viewModel.attentionState.mood
+    }
+
+    // Эффективный наклон головы
+    private var effectiveHeadTilt: Double {
+        if isWakingUp {
+            switch wakeUpPhase {
+            case 3: return -8  // Наклон влево
+            case 4: return 8   // Наклон вправо
+            case 5: return 3   // Лёгкий наклон (любопытство)
+            default: return 0
+            }
+        }
+        if isPeeking { return 5 }  // Любопытно выглядывает
+        if isGiggling { return Double.random(in: -5...5) }  // Трясётся от смеха
+        return headTilt
     }
 
     var body: some View {
@@ -744,23 +1814,68 @@ struct ExtendedNotchView: View {
                     }
 
                     // Робот — один, анимированный, перемещается из правого верхнего угла в центр
-                    RobotFace(
-                        mood: showLoveEasterEgg ? .love : viewModel.attentionState.mood,
-                        eyeOffset: effectiveEyeOffset,
-                        isBlinking: isBlinking,
-                        isWinking: isWinking,
-                        eyeSquint: eyeSquint,
-                        antennaGlow: antennaGlow,
-                        headTilt: headTilt,
-                        bounce: bounce + breathe + microBounce
-                    )
+                    ZStack {
+                        // Progress ring (only when Pomodoro active)
+                        if settings.pomodoroState != .idle {
+                            PomodoroProgressRing(
+                                progress: pomodoroProgress,
+                                isWorking: settings.pomodoroState == .working
+                            )
+                            .frame(width: isExpanded ? 70 : 28, height: isExpanded ? 70 : 28)
+                        }
+
+                        RobotFace(
+                            mood: effectiveMood,
+                            eyeOffset: effectiveEyeOffset,
+                            isBlinking: isBlinking && !isWakingUp,
+                            isWinking: isWinking,
+                            eyeSquint: effectiveSquint,
+                            antennaGlow: antennaGlow && !isWakingUp,
+                            headTilt: effectiveHeadTilt,
+                            bounce: bounce + breathe + microBounce + (isGiggling ? 2 : 0)
+                        )
+                    }
                     .scaleEffect((isExpanded ? 2.5 : 1.0) * gestureRecognizedScale)
+                    .opacity(isWakingUp && wakeUpPhase == 0 ? 0.7 : 1.0)
                     .offset(
                         x: isExpanded ? 0 : (currentWidth / 2 - 24),
                         y: isExpanded ? -10 : (-currentHeight / 2 + baseHeight / 2)
                     )
                 }
                 .frame(width: currentWidth, height: currentHeight, alignment: .top)
+            }
+
+            // Onboarding tooltip
+            if showOnboardingTip && onboardingStep < onboardingMessages.count {
+                OnboardingTooltip(
+                    message: onboardingMessages[onboardingStep],
+                    step: onboardingStep,
+                    totalSteps: onboardingMessages.count,
+                    onNext: {
+                        withAnimation {
+                            if onboardingStep < onboardingMessages.count - 1 {
+                                onboardingStep += 1
+                            } else {
+                                showOnboardingTip = false
+                                settings.completeOnboarding()
+                            }
+                        }
+                    },
+                    onSkip: {
+                        withAnimation {
+                            showOnboardingTip = false
+                            settings.completeOnboarding()
+                        }
+                    }
+                )
+                .offset(y: currentHeight + 8)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            // Greeting banner
+            if showGreeting, let message = greetingMessage {
+                GreetingBanner(message: message, isShowing: $showGreeting)
+                    .offset(y: currentHeight + 8)
             }
 
             Spacer(minLength: 0)
@@ -771,6 +1886,8 @@ struct ExtendedNotchView: View {
             triggerLoveEasterEgg()
         }
         .onTapGesture(count: 1) {
+            // Track quick clicks for giggling easter egg
+            handleQuickClicks()
             // Одиночный клик — расширяем/сворачиваем панель
             toggleExpanded()
         }
@@ -815,9 +1932,53 @@ struct ExtendedNotchView: View {
             withAnimation(.easeInOut(duration: 0.25)) {
                 eyeSquint = hovering ? 0.3 : 0  // 0.3 = прищур, 0 = открыты
             }
+
+            // Track stare time for embarrassment easter egg
+            if hovering && !isWakingUp {
+                stareTime = Date()
+            } else {
+                stareTime = nil
+                isEmbarrassed = false
+            }
         }
         .onAppear {
-            startAnimations()
+            // WOW Effect: Wake-up animation on first launch
+            if !settings.hasSeenWakeUpAnimation {
+                startWakeUpAnimation()
+                settings.markWakeUpAnimationSeen()
+            } else {
+                // Normal startup
+                startAnimations()
+            }
+
+            // Show onboarding for first-time users (after wake-up if applicable)
+            let onboardingDelay = settings.hasSeenWakeUpAnimation ? 1.5 : 4.0
+            if settings.showOnboarding && !settings.hasCompletedOnboarding {
+                DispatchQueue.main.asyncAfter(deadline: .now() + onboardingDelay) {
+                    withAnimation {
+                        showOnboardingTip = true
+                    }
+                }
+            } else {
+                // Show greeting if available
+                if let greeting = settings.getGreeting() {
+                    greetingMessage = greeting
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        withAnimation {
+                            showGreeting = true
+                        }
+                    }
+                    // Auto-hide after 5 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
+                        withAnimation {
+                            showGreeting = false
+                        }
+                    }
+                }
+            }
+
+            // Update last session date
+            settings.lastSessionDate = Date()
         }
         .onChange(of: viewModel.attentionState.mood) { _, newMood in
             reactToMood(newMood)
@@ -830,6 +1991,16 @@ struct ExtendedNotchView: View {
         .onChange(of: viewModel.cameraManager.isShowingStop) { _, isShowingStop in
             if isShowingStop {
                 handleStopGesture()
+            }
+        }
+        .onChange(of: microphoneMonitor.isLoudSound) { _, isLoud in
+            if isLoud {
+                reactToLoudSound()
+            }
+        }
+        .onChange(of: viewModel.cameraManager.isShowingHeart) { _, isShowingHeart in
+            if isShowingHeart {
+                reactToHeartGesture()
             }
         }
     }
@@ -898,9 +2069,21 @@ struct ExtendedNotchView: View {
         blinkTimer?.invalidate()
         idleTimer?.invalidate()
         easterEggTimer?.invalidate()
+        wowEffectsTimer?.invalidate()
 
         // Запускаем таймер редких пасхалок
         startEasterEggTimer()
+
+        // WOW Effects timer — stare detection and face tracking
+        wowEffectsTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            // Check stare time for embarrassment
+            checkStareTime()
+            // Update face tracking offset from camera
+            updateFaceTracking()
+        }
+
+        // Start microphone monitoring for loud sound reactions
+        microphoneMonitor.startMonitoring()
 
         // Моргание — случайное, естественное
         blinkTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { _ in
@@ -1012,7 +2195,7 @@ struct ExtendedNotchView: View {
         // Вытягивается вверх
         withAnimation(.easeOut(duration: 0.5)) {
             bounce = -4
-            headTilt = Double.random(in: [-8, 8])
+            headTilt = Double.random(in: -8...8)
         }
 
         // Расслабляется
@@ -1100,6 +2283,228 @@ struct ExtendedNotchView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isWinking = false
                 headTilt = 0
+            }
+        }
+    }
+
+    // MARK: - WOW Effects
+
+    /// Анимация пробуждения — робот просыпается в notch
+    private func startWakeUpAnimation() {
+        isWakingUp = true
+        wakeUpPhase = 0
+
+        // Фаза 0 → 1: Чуть приоткрывает глаза
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                wakeUpPhase = 1
+            }
+        }
+
+        // Фаза 1 → 2: Полуоткрывает глаза
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                wakeUpPhase = 2
+            }
+        }
+
+        // Фаза 2 → 3: Открывает глаза, смотрит влево
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                wakeUpPhase = 3
+            }
+        }
+
+        // Фаза 3 → 4: Смотрит вправо
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                wakeUpPhase = 4
+            }
+        }
+
+        // Фаза 4 → 5: Смотрит на пользователя, прищуривается (узнал!)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                wakeUpPhase = 5
+            }
+        }
+
+        // Завершение анимации — робот ожил!
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                isWakingUp = false
+                wakeUpPhase = 0
+                antennaGlow = true
+            }
+            // Маленький прыжок радости
+            happyBounce()
+            SoundManager.shared.playHappyChirp()
+
+            // Start regular animations after wake-up
+            startAnimations()
+        }
+    }
+
+    /// Робот выглядывает из notch при hover
+    private func peekOut() {
+        guard !isExpanded && !isPeeking else { return }
+
+        isPeeking = true
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+            peekOffset = 0
+        }
+
+        // Любопытно оглядывается
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            lookAround()
+        }
+    }
+
+    private func peekBack() {
+        guard isPeeking else { return }
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            peekOffset = -30
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            isPeeking = false
+        }
+    }
+
+    /// Проверка на долгий взгляд — робот смущается
+    private func checkStareTime() {
+        guard let startTime = stareTime else { return }
+
+        let staredFor = Date().timeIntervalSince(startTime)
+
+        // Если смотрят больше 3 секунд — смущается
+        if staredFor > 3.0 && !isEmbarrassed {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                isEmbarrassed = true
+            }
+            SoundManager.shared.playHappyChirp()
+
+            // Через 2 секунды перестаёт смущаться
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    isEmbarrassed = false
+                }
+            }
+        }
+    }
+
+    /// Обработка быстрых кликов — робот смеётся
+    private func handleQuickClicks() {
+        let now = Date()
+        let timeSinceLastClick = now.timeIntervalSince(lastClickTime)
+
+        if timeSinceLastClick < 0.5 {
+            clickCount += 1
+        } else {
+            clickCount = 1
+        }
+        lastClickTime = now
+
+        // 5+ быстрых кликов — робот хихикает
+        if clickCount >= 5 && !isGiggling {
+            startGiggling()
+            clickCount = 0
+        }
+    }
+
+    private func startGiggling() {
+        isGiggling = true
+        SoundManager.shared.playCelebration()
+
+        // Трясётся от смеха 1.5 секунды
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation {
+                isGiggling = false
+            }
+        }
+    }
+
+    /// Обновление face tracking offset из камеры
+    private func updateFaceTracking() {
+        // Только если лицо видно
+        guard viewModel.cameraManager.isFaceDetected else {
+            // Если лицо не видно — сбрасываем offset
+            if faceTrackingOffset != .zero {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    faceTrackingOffset = .zero
+                }
+            }
+            return
+        }
+
+        // Используем позицию лица на экране (0 = слева, 1 = справа)
+        let faceX = viewModel.cameraManager.facePositionX
+
+        // Конвертируем в offset: 0.5 = центр = 0, края = ±1.5
+        // Если человек слева (faceX < 0.5), робот смотрит влево (offset < 0)
+        let xOffset = (faceX - 0.5) * 3.0
+
+        // Ограничиваем максимальное смещение
+        let clampedOffset = max(-1.5, min(1.5, xOffset))
+
+        withAnimation(.easeOut(duration: 0.15)) {
+            faceTrackingOffset = CGSize(width: clampedOffset, height: 0)
+        }
+    }
+
+    /// Реакция на громкий звук — робот вздрагивает
+    private func reactToLoudSound() {
+        guard !isWakingUp && !isGiggling else { return }
+
+        // Робот вздрагивает и удивляется
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.4)) {
+            isSurprised = true
+            bounce = -4
+            headTilt = Double.random(in: -10...10)
+        }
+
+        SoundManager.shared.playSurprisedSound()
+
+        // Возвращается в норму
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                isSurprised = false
+                bounce = 0
+                headTilt = 0
+            }
+        }
+    }
+
+    /// Реакция на сердечко руками — робот влюбляется!
+    private func reactToHeartGesture() {
+        guard !isWakingUp else { return }
+
+        // Расширенная love reaction
+        SoundManager.shared.playLoveSound()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+            showLoveEasterEgg = true
+            bounce = -5
+            eyeSquint = 0.4  // Счастливо прищуривается
+        }
+
+        // Visual feedback — pulse
+        withAnimation(.spring(response: 0.15, dampingFraction: 0.5)) {
+            gestureRecognizedScale = 1.2
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) {
+                self.gestureRecognizedScale = 1.0
+            }
+        }
+
+        // Longer love animation for heart gesture
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                showLoveEasterEgg = false
+                bounce = 0
+                eyeSquint = 0
             }
         }
     }
@@ -2034,6 +3439,147 @@ struct MiniEye: View {
     }
 }
 
+// MARK: - Pomodoro Progress Ring
+
+struct PomodoroProgressRing: View {
+    let progress: Double  // 0.0 - 1.0
+    let isWorking: Bool
+
+    private var ringColor: Color {
+        isWorking ? .green : .blue
+    }
+
+    var body: some View {
+        ZStack {
+            // Soft outer glow — очень размытый
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    ringColor.opacity(0.2),
+                    style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .blur(radius: 8)
+
+            // Medium glow
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    ringColor.opacity(0.3),
+                    style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .blur(radius: 4)
+
+            // Core line — тонкая яркая линия в центре
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    ringColor.opacity(0.8),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+        }
+        .animation(.easeInOut(duration: 0.3), value: progress)
+    }
+}
+
+// MARK: - Onboarding Tooltip
+
+struct OnboardingTooltip: View {
+    let message: String
+    let step: Int
+    let totalSteps: Int
+    let onNext: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(message)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                // Progress dots
+                HStack(spacing: 4) {
+                    ForEach(0..<totalSteps, id: \.self) { i in
+                        Circle()
+                            .fill(i == step ? Color.white : Color.white.opacity(0.3))
+                            .frame(width: 4, height: 4)
+                    }
+                }
+
+                Spacer()
+
+                Button("Skip") {
+                    onSkip()
+                }
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.6))
+                .buttonStyle(.plain)
+
+                Button(step == totalSteps - 1 ? "Done" : "Next") {
+                    onNext()
+                }
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.2))
+                .cornerRadius(4)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black.opacity(0.85))
+        )
+        .frame(width: 220)
+    }
+}
+
+// MARK: - Greeting Banner
+
+struct GreetingBanner: View {
+    let message: String
+    @Binding var isShowing: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("🤖")
+                .font(.system(size: 12))
+
+            Text(message)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.white)
+
+            Spacer()
+
+            Button {
+                withAnimation {
+                    isShowing = false
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.black.opacity(0.85))
+        )
+        .frame(width: 280)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
 // MARK: - Отслеживание курсора с живым поведением
 
 class MouseTracker: ObservableObject {
@@ -2093,34 +3639,28 @@ class MouseTracker: ObservableObject {
     }
 
     private func lookRandomDirection() {
+        // Смотрит в случайную сторону (когда face tracking недоступен)
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.3)) {
-                self.isFollowingMouse = false
                 self.randomLookOffset = CGSize(
                     width: CGFloat.random(in: -1.5...1.5),
                     height: CGFloat.random(in: -1.0...1.0)
                 )
             }
         }
-        // Возвращается к мышке через некоторое время
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.8...2.0)) { [weak self] in
+        // Через время сбрасываем случайный offset (чтобы face tracking мог взять верх)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1.5...3.0)) { [weak self] in
             withAnimation(.easeInOut(duration: 0.3)) {
-                self?.isFollowingMouse = true
                 self?.randomLookOffset = .zero
             }
         }
     }
 
     func lookAtUser() {
+        // Сбрасываем случайный offset — теперь face tracking возьмёт верх
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.25)) {
-                self.isFollowingMouse = false
-                self.randomLookOffset = .zero  // Смотрит прямо
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1.0...2.5)) { [weak self] in
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self?.isFollowingMouse = true
+                self.randomLookOffset = .zero
             }
         }
     }
@@ -2160,7 +3700,23 @@ class MouseTracker: ObservableObject {
         let distance = hypot(mouseLocation.x - lastMousePosition.x, mouseLocation.y - lastMousePosition.y)
         if distance < 5 {
             mouseIdleTime += 0.1
+            // Если мышка не двигалась больше 1.5 секунд — перестаём следить за ней
+            if mouseIdleTime > 1.5 && isFollowingMouse {
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        self.isFollowingMouse = false
+                    }
+                }
+            }
         } else {
+            // Мышка начала двигаться — снова следим за ней
+            if mouseIdleTime > 1.5 && !isFollowingMouse {
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        self.isFollowingMouse = true
+                    }
+                }
+            }
             mouseIdleTime = 0
         }
         lastMousePosition = mouseLocation
